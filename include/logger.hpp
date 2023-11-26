@@ -15,7 +15,7 @@ namespace efp
 {
     // todo implement spinlock mth
 
-    enum class LogLevel
+    enum class LogLevel : uint8_t
     {
         Debug,
         Info,
@@ -52,15 +52,15 @@ namespace efp
 
         struct PlainString
         {
-            LogLevel level;
             const char *str;
+            LogLevel level;
         };
 
         struct FormatString
         {
-            LogLevel level;
             const char *fmt_str;
-            size_t arg_num;
+            uint8_t arg_num;
+            LogLevel level;
         };
 
         // todo Add all the argument types
@@ -247,8 +247,9 @@ namespace efp
 
                     write_buffer->push_back(
                         detail::PlainString{
+                            fmt_str,
                             level,
-                            fmt_str});
+                        });
 
                     writing_flag_.clear();
                 }
@@ -260,9 +261,10 @@ namespace efp
 
                     write_buffer->push_back(
                         detail::FormatString{
-                            level,
                             fmt_str,
-                            sizeof...(args)});
+                            sizeof...(args),
+                            level,
+                        });
 
                     execute_pack(enqueue_arg(args)...);
 
