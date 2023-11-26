@@ -40,7 +40,7 @@ template <typename A>
 Unit enqueue_log_impl(A a)
 {
     log_datas.push_back(a);
-    return {};
+    return unit;
 }
 
 template <typename... As>
