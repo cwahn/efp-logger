@@ -5,13 +5,13 @@
 
 int main()
 {
-    const int numMessages = 10000000; // Number of messages to log for the benchmark
+    const int num_message = 1'000'000; // Number of messages to log for the benchmark
 
     // Start timer
     auto start = std::chrono::high_resolution_clock::now();
 
     // Log messages in a loop
-    for (int i = 0; i < numMessages; ++i)
+    for (int i = 0; i < num_message; ++i)
     {
         efp::info("Logging message number: {}", i);
     }
@@ -25,10 +25,10 @@ int main()
     // Calculate and print the duration
     std::chrono::duration<double> duration = end - start;
     double total_seconds = duration.count() - 1; // Subtracting the sleep time
-    double messages_per_second = numMessages / total_seconds;
+    double messages_per_second = num_message / total_seconds;
 
-    std::cout << "Logged " << numMessages << " messages in " << total_seconds << " seconds.\n";
-    std::cout << "Average time per message: " << (total_seconds / numMessages) << " seconds.\n";
+    std::cout << "Logged " << num_message << " messages in " << total_seconds << " seconds.\n";
+    std::cout << "Average time per message: " << (total_seconds / num_message) << " seconds.\n";
     std::cout << "Messages per second: " << messages_per_second << std::endl;
 
     return 0;

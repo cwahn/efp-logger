@@ -10,10 +10,12 @@
 #include "fmt/core.h"
 #include "fmt/args.h"
 #include "fmt/chrono.h"
+#include "fmt/color.h"
 
 namespace efp
 {
     // todo implement spinlock mth
+    // todo Make user could change the destination of log
 
     enum class LogLevel : uint8_t
     {
@@ -33,20 +35,39 @@ namespace efp
             switch (log_level)
             {
             case LogLevel::Debug:
-                return "[DEBUG]";
+                return "DEBUG";
                 break;
             case LogLevel::Info:
-                return "[INFO] ";
+                return "INFO ";
                 break;
             case LogLevel::Warn:
-                return "[WARN] ";
+                return "WARN ";
                 break;
             case LogLevel::Error:
-                return "[ERROR]";
+                return "ERROR";
                 break;
             case LogLevel::Fatal:
-                return "[FATAL]";
+                return "FATAL";
                 break;
+            }
+        }
+
+        const fmt::text_style style_for_level(LogLevel level)
+        {
+            switch (level)
+            {
+            case LogLevel::Debug:
+                return fg(fmt::color::dodger_blue);
+            case LogLevel::Info:
+                return fg(fmt::color::green);
+            case LogLevel::Warn:
+                return fg(fmt::color::gold);
+            case LogLevel::Error:
+                return fg(fmt::color::red);
+            case LogLevel::Fatal:
+                return fg(fmt::color::purple) | fmt::emphasis::bold;
+            default:
+                return fg(fmt::color::white);
             }
         }
 
@@ -279,7 +300,8 @@ namespace efp
                 .match(
                     [&](const PlainString &str)
                     {
-                        fmt::print("{} {}", log_level_cstr(str.level), str.str);
+                        fmt::print(style_for_level(str.level), "{} ", log_level_cstr(str.level));
+                        fmt::print("{}", str.str);
                         fmt::print("\n");
                     },
                     [&](const FormatString &fstr)
@@ -304,7 +326,7 @@ namespace efp
 
                         for_index(store_arg, fstr.arg_num);
 
-                        fmt::print("{} ", log_level_cstr(fstr.level));
+                        fmt::print(style_for_level(fstr.level), "{} ", log_level_cstr(fstr.level));
                         fmt::vprint(fstr.fmt_str, dyn_store);
                         fmt::print("\n");
                     },
@@ -318,8 +340,9 @@ namespace efp
                 .match(
                     [&](const PlainString &str)
                     {
-                        fmt::print("{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print("{} {}", log_level_cstr(str.level), str.str);
+                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                        fmt::print(style_for_level(str.level), "{} ", log_level_cstr(str.level));
+                        fmt::print("{}", str.str);
                         fmt::print("\n");
                     },
                     [&](const FormatString &fstr)
@@ -344,8 +367,8 @@ namespace efp
 
                         for_index(store_arg, fstr.arg_num);
 
-                        fmt::print("{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print("{} ", log_level_cstr(fstr.level));
+                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                        fmt::print(style_for_level(fstr.level), "{} ", log_level_cstr(fstr.level));
                         fmt::vprint(fstr.fmt_str, dyn_store);
                         fmt::print("\n");
                     },
@@ -358,7 +381,8 @@ namespace efp
             return read_buffer->empty();
         }
 
-        extern thread_local LocalLogger local_logger{};
+        extern thread_local LocalLogger local_logger;
+        thread_local LocalLogger local_logger{};
     }
 
     template <typename... Args>
