@@ -1,5 +1,5 @@
-#ifndef EFP_LOGGER_HPP_
-#define EFP_LOGGER_HPP_
+#ifndef EFP_RT_LOG_HPP_
+#define EFP_RT_LOG_HPP_
 
 #include <atomic>
 #include <thread>
@@ -14,7 +14,6 @@
 
 namespace efp
 {
-    // todo implement spinlock mth
     // todo Make user could change the destination of log
 
     enum class LogLevel : uint8_t
@@ -91,7 +90,8 @@ namespace efp
             int,
             float,
             double,
-            const char *>;
+            const char *,
+            size_t>;
 
         // Forward declaration of LocalLogger
         class LocalLogger
@@ -108,7 +108,8 @@ namespace efp
 
             void swap_buffer();
             void dequeue();
-            void dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point);
+            void dequeue_with_time(
+                const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point);
 
             bool empty();
 
@@ -119,23 +120,22 @@ namespace efp
         };
     }
 
-    class Log
+    class RtLog
     {
         friend class detail::LocalLogger;
 
     public:
-        ~Log()
+        ~RtLog()
         {
-            // fmt::println("Terminating Log");
             run_.store(false);
 
             if (thread_.joinable())
                 thread_.join();
         }
 
-        inline static Log &instance()
+        inline static RtLog &instance()
         {
-            static Log inst{};
+            static RtLog inst{};
             return inst;
         }
 
@@ -178,14 +178,12 @@ namespace efp
     protected:
         void add(detail::LocalLogger *local_logger)
         {
-            // fmt::println("Adding logger");
             std::lock_guard<std::mutex> lock(m_);
             local_loggers_.push_back(local_logger);
         }
 
         void remove(detail::LocalLogger *local_logger)
         {
-            // fmt::println("Removing logger");
             std::lock_guard<std::mutex> lock(m_);
 
             const auto maybe_idx = elem_index(local_logger, local_loggers_);
@@ -194,7 +192,7 @@ namespace efp
         }
 
     private:
-        Log()
+        RtLog()
             : with_time_stamp(true),
               run_(true),
               thread_(
@@ -211,7 +209,6 @@ namespace efp
                       }
                   })
         {
-            // fmt::println("Log initialized");
         }
 
         std::mutex m_;
@@ -222,19 +219,16 @@ namespace efp
 
     namespace detail
     {
-        // todo use spinlock of mth
-        // todo use pointer
-
         LocalLogger::LocalLogger()
             : read_buffer(new Vcq<LogData, local_buffer_size>{}),
               write_buffer(new Vcq<LogData, local_buffer_size>{})
         {
-            Log::instance().add(this);
+            RtLog::instance().add(this);
         }
 
         LocalLogger::~LocalLogger()
         {
-            Log::instance().remove(this);
+            RtLog::instance().remove(this);
         }
 
         void LocalLogger::swap_buffer()
@@ -258,7 +252,7 @@ namespace efp
         template <typename... Args>
         void LocalLogger::enqueue(LogLevel level, const char *fmt_str, Args... args)
         {
-            if (level >= Log::instance().level)
+            if (level >= RtLog::instance().level)
             {
                 if (sizeof...(args) == 0)
                 {
@@ -319,6 +313,8 @@ namespace efp
                                 { dyn_store.push_back(arg); },
                                 [&](const char *arg)
                                 { dyn_store.push_back(arg); },
+                                [&](size_t arg)
+                                { dyn_store.push_back(arg); },
                                 //  Number of arguments are decided by number of argument, not parsing result.
                                 [&]()
                                 { fmt::println("potential error. this messege should not be displayed"); });
@@ -360,6 +356,8 @@ namespace efp
                                 { dyn_store.push_back(arg); },
                                 [&](const char *arg)
                                 { dyn_store.push_back(arg); },
+                                [&](size_t arg)
+                                { dyn_store.push_back(arg); },
                                 //  Number of arguments are decided by number of argument, not parsing result.
                                 [&]()
                                 { fmt::println("potential error. this messege should not be displayed"); });
@@ -386,31 +384,31 @@ namespace efp
     }
 
     template <typename... Args>
-    void debug(const char *fmt_str, Args... args)
+    inline void debug(const char *fmt_str, Args... args)
     {
         detail::local_logger.enqueue(LogLevel::Debug, fmt_str, args...);
     }
 
     template <typename... Args>
-    void info(const char *fmt_str, Args... args)
+    inline void info(const char *fmt_str, Args... args)
     {
         detail::local_logger.enqueue(LogLevel::Info, fmt_str, args...);
     }
 
     template <typename... Args>
-    void warn(const char *fmt_str, Args... args)
+    inline void warn(const char *fmt_str, Args... args)
     {
         detail::local_logger.enqueue(LogLevel::Warn, fmt_str, args...);
     }
 
     template <typename... Args>
-    void error(const char *fmt_str, Args... args)
+    inline void error(const char *fmt_str, Args... args)
     {
         detail::local_logger.enqueue(LogLevel::Error, fmt_str, args...);
     }
 
     template <typename... Args>
-    void fatal(const char *fmt_str, Args... args)
+    inline void fatal(const char *fmt_str, Args... args)
     {
         detail::local_logger.enqueue(LogLevel::Fatal, fmt_str, args...);
     }

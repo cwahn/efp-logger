@@ -1,7 +1,8 @@
 #include <vector>
 #include <iostream>
 #include <chrono>
-#include "logger.hpp"
+
+#include "rt_log.hpp"
 
 int main()
 {
@@ -10,7 +11,7 @@ int main()
     // Start timer
     auto start = std::chrono::high_resolution_clock::now();
 
-    // Log messages in a loop
+    // RtLog messages in a loop
     for (int i = 0; i < num_message; ++i)
     {
         efp::info("Logging message number: {}", i);
