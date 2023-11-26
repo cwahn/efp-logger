@@ -2,7 +2,7 @@
 
 int main()
 {
-    efp::Log::instance(); // Assuming this initializes the logging system
+    efp::Log::instance().level = efp::LogLevel::Info;
 
     // Use the logging functions
     efp::debug("This is a debug message.");
