@@ -1,0 +1,2 @@
+add_executable(fmt_enum_test fmt_enum_test.cpp)
+target_link_libraries(fmt_enum_test PRIVATE efp fmt)
