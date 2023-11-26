@@ -1,0 +1,3 @@
+[submodule "lib/efp"]
+	path = lib/efp
+	url = http://github.com/cwahn/efp
