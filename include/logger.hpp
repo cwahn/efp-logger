@@ -9,6 +9,7 @@
 
 #include "fmt/core.h"
 #include "fmt/args.h"
+#include "fmt/chrono.h"
 
 namespace efp
 {
@@ -86,6 +87,7 @@ namespace efp
 
             void swap_buffer();
             void dequeue();
+            void dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point);
 
             bool empty();
 
@@ -131,7 +133,26 @@ namespace efp
             for_each(process_one, local_loggers_);
         }
 
+        void process_with_time()
+        {
+            const auto now = std::chrono::system_clock::now();
+            const auto now_sec = std::chrono::time_point_cast<std::chrono::seconds>(now);
+
+            const auto process_one = [&](detail::LocalLogger *local_logger)
+            {
+                local_logger->swap_buffer();
+
+                while (!local_logger->empty())
+                {
+                    local_logger->dequeue_with_time(now_sec);
+                }
+            };
+
+            for_each(process_one, local_loggers_);
+        }
+
         LogLevel level;
+        bool with_time_stamp;
 
     protected:
         void add(detail::LocalLogger *local_logger)
@@ -153,7 +174,8 @@ namespace efp
 
     private:
         Log()
-            : run_(true),
+            : with_time_stamp(true),
+              run_(true),
               thread_(
                   [&]()
                   {
@@ -161,7 +183,10 @@ namespace efp
                       {
                           // todo periodic
                           std::this_thread::sleep_for(std::chrono::milliseconds{1});
-                          process();
+                          if (with_time_stamp)
+                              process_with_time();
+                          else
+                              process();
                       }
                   })
         {
@@ -277,6 +302,47 @@ namespace efp
 
                         for_index(store_arg, fstr.arg_num);
 
+                        fmt::print("{} ", log_level_cstr(fstr.level));
+                        fmt::vprint(fstr.fmt_str, dyn_store);
+                        fmt::print("\n");
+                    },
+                    []()
+                    { fmt::println("invalid log data. first data has to be format string"); });
+        }
+
+        void LocalLogger::dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point)
+        {
+            read_buffer->pop_front()
+                .match(
+                    [&](const PlainString &str)
+                    {
+                        fmt::print("{:%Y-%m-%d %H:%M:%S} ", time_point);
+                        fmt::print("{} {}", log_level_cstr(str.level), str.str);
+                        fmt::print("\n");
+                    },
+                    [&](const FormatString &fstr)
+                    {
+                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+
+                        const auto store_arg = [&](size_t)
+                        {
+                            read_buffer->pop_front().match(
+                                [&](int arg)
+                                { dyn_store.push_back(arg); },
+                                [&](float arg)
+                                { dyn_store.push_back(arg); },
+                                [&](double arg)
+                                { dyn_store.push_back(arg); },
+                                [&](const char *arg)
+                                { dyn_store.push_back(arg); },
+                                //  Number of arguments are decided by number of argument, not parsing result.
+                                [&]()
+                                { fmt::println("potential error. this messege should not be displayed"); });
+                        };
+
+                        for_index(store_arg, fstr.arg_num);
+
+                        fmt::print("{:%Y-%m-%d %H:%M:%S} ", time_point);
                         fmt::print("{} ", log_level_cstr(fstr.level));
                         fmt::vprint(fstr.fmt_str, dyn_store);
                         fmt::print("\n");
