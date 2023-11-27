@@ -17,6 +17,7 @@
 #define EFP_LOG_TIME_STAMP true
 #define EFP_LOG_BUFFER_SIZE 128
 // todo Maybe compile time log-level
+// todo Processing period
 
 namespace efp
 {
@@ -147,9 +148,6 @@ namespace efp
             template <typename... Args>
             void enqueue(LogLevel level, const char *fmt_str, Args... args)
             {
-                // ! temp
-                // if (level >= RtLog::instance().level)
-                // {
                 if (sizeof...(args) == 0)
                 {
                     spinlock_.lock();
@@ -177,7 +175,6 @@ namespace efp
 
                     spinlock_.unlock();
                 }
-                // }
             }
 
             void swap_buffer()
@@ -185,6 +182,34 @@ namespace efp
                 spinlock_.lock();
                 swap(write_buffer_, read_buffer_);
                 spinlock_.unlock();
+            }
+
+            void collect_dyn_args(size_t arg_num)
+            {
+                const auto collect_arg = [&](size_t)
+                {
+                    read_buffer_->pop_front().match(
+                        [&](int arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](float arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](double arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](const char *arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](size_t arg)
+                        { dyn_args_.push_back(arg); },
+                        //  Number of arguments are decided by number of argument, not parsing result.
+                        [&]()
+                        { fmt::println("potential error. this messege should not be displayed"); });
+                };
+
+                for_index(collect_arg, arg_num);
+            }
+
+            void clear_dyn_args()
+            {
+                dyn_args_.clear();
             }
 
             void dequeue()
@@ -199,31 +224,13 @@ namespace efp
                         },
                         [&](const FormatString &fstr)
                         {
-                            fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
-
-                            const auto store_arg = [&](size_t)
-                            {
-                                read_buffer_->pop_front().match(
-                                    [&](int arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](float arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](double arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](const char *arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](size_t arg)
-                                    { dyn_store.push_back(arg); },
-                                    //  Number of arguments are decided by number of argument, not parsing result.
-                                    [&]()
-                                    { fmt::println("potential error. this messege should not be displayed"); });
-                            };
-
-                            for_index(store_arg, fstr.arg_num);
+                            collect_dyn_args(fstr.arg_num);
 
                             fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
-                            fmt::vprint(fstr.fmt_str, dyn_store);
+                            fmt::vprint(fstr.fmt_str, dyn_args_);
                             fmt::print("\n");
+
+                            clear_dyn_args();
                         },
                         []()
                         { fmt::println("invalid log data. first data has to be format string"); });
@@ -242,32 +249,14 @@ namespace efp
                         },
                         [&](const FormatString &fstr)
                         {
-                            fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
-
-                            const auto store_arg = [&](size_t)
-                            {
-                                read_buffer_->pop_front().match(
-                                    [&](int arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](float arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](double arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](const char *arg)
-                                    { dyn_store.push_back(arg); },
-                                    [&](size_t arg)
-                                    { dyn_store.push_back(arg); },
-                                    //  Number of arguments are decided by number of argument, not parsing result.
-                                    [&]()
-                                    { fmt::println("potential error. this messege should not be displayed"); });
-                            };
-
-                            for_index(store_arg, fstr.arg_num);
+                            collect_dyn_args(fstr.arg_num);
 
                             fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
                             fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
-                            fmt::vprint(fstr.fmt_str, dyn_store);
+                            fmt::vprint(fstr.fmt_str, dyn_args_);
                             fmt::print("\n");
+
+                            clear_dyn_args();
                         },
                         []()
                         { fmt::println("invalid log data. first data has to be format string"); });
@@ -282,6 +271,7 @@ namespace efp
             Spinlock spinlock_;
             Vcq<LogData, EFP_LOG_BUFFER_SIZE> *write_buffer_;
             Vcq<LogData, EFP_LOG_BUFFER_SIZE> *read_buffer_;
+            fmt::dynamic_format_arg_store<fmt::format_context> dyn_args_;
         };
 
         // Forward declaration of LocalLogger
@@ -381,8 +371,8 @@ namespace efp
 #endif
         }
 
-        LogLevel level;
-        bool with_time_stamp;
+        static LogLevel log_level;
+        // bool with_time_stamp;
 
 #if EFP_LOG_GLOBAL_BUFFER == true
 
@@ -427,7 +417,7 @@ namespace efp
 
     private:
         RtLog()
-            : with_time_stamp(true),
+            : // with_time_stamp(true),
               run_(true),
               thread_(
                   [&]()
@@ -457,6 +447,8 @@ namespace efp
         std::atomic<bool> run_;
         std::thread thread_;
     };
+
+    LogLevel RtLog::log_level = LogLevel::Debug;
 
     namespace detail
     {
@@ -506,11 +498,15 @@ namespace efp
         template <typename... Args>
         inline void enqueue_log(LogLevel level, const char *fmt_str, Args... args)
         {
+
+            if (level >= RtLog::log_level)
+            {
 #if EFP_LOG_GLOBAL_BUFFER == true
-            RtLog::instance().enqueue(level, fmt_str, args...);
+                RtLog::instance().enqueue(level, fmt_str, args...);
 #else
-            detail::local_logger.enqueue(level, fmt_str, args...);
+                detail::local_logger.enqueue(level, fmt_str, args...);
 #endif
+            }
         }
     }
 
