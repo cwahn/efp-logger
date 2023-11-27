@@ -12,7 +12,11 @@
 #include "fmt/chrono.h"
 #include "fmt/color.h"
 
-#define EFP_LOG_GLOBAL_BUFFER
+#define EFP_LOG_GLOBAL_BUFFER true
+// todo Maybe optional runtime configuration
+#define EFP_LOG_TIME_STAMP true
+#define EFP_LOG_BUFFER_SIZE 128
+// todo Maybe compile time log-level
 
 namespace efp
 {
@@ -29,8 +33,6 @@ namespace efp
 
     namespace detail
     {
-        constexpr size_t local_buffer_size = 128;
-
         const char *log_level_cstr(LogLevel log_level)
         {
             switch (log_level)
@@ -118,8 +120,8 @@ namespace efp
         {
         public:
             explicit LogBuffer()
-                : read_buffer_(new Vcq<detail::LogData, detail::local_buffer_size>{}),
-                  write_buffer_(new Vcq<detail::LogData, detail::local_buffer_size>{})
+                : read_buffer_(new Vcq<detail::LogData, EFP_LOG_BUFFER_SIZE>{}),
+                  write_buffer_(new Vcq<detail::LogData, EFP_LOG_BUFFER_SIZE>{})
             {
             }
 
@@ -278,8 +280,8 @@ namespace efp
 
         private:
             Spinlock spinlock_;
-            Vcq<LogData, local_buffer_size> *write_buffer_;
-            Vcq<LogData, local_buffer_size> *read_buffer_;
+            Vcq<LogData, EFP_LOG_BUFFER_SIZE> *write_buffer_;
+            Vcq<LogData, EFP_LOG_BUFFER_SIZE> *read_buffer_;
         };
 
         // Forward declaration of LocalLogger
@@ -328,7 +330,7 @@ namespace efp
 
         void process()
         {
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
 
             log_buffer_.swap_buffer();
 
@@ -355,7 +357,7 @@ namespace efp
             const auto now = std::chrono::system_clock::now();
             const auto now_sec = std::chrono::time_point_cast<std::chrono::seconds>(now);
 
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
             // printf("running\n");
             log_buffer_.swap_buffer();
 
@@ -382,7 +384,7 @@ namespace efp
         LogLevel level;
         bool with_time_stamp;
 
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
 
         template <typename... Args>
         void enqueue(LogLevel level, const char *fmt_str, Args... args)
@@ -404,7 +406,7 @@ namespace efp
 #endif
 
     protected:
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
 
 #else
         void add(detail::LocalLogger *local_logger)
@@ -432,20 +434,19 @@ namespace efp
                   {
                       while (run_.load())
                       {
-                          //   printf("running");
+#if EFP_LOG_TIME_STAMP == true
+                          process_with_time();
+#else
+                          process();
+#endif
                           // todo periodic
-                          if (with_time_stamp)
-                              process_with_time();
-                          else
-                              process();
-
                           std::this_thread::sleep_for(std::chrono::milliseconds{1});
                       }
                   })
         {
         }
 
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
         detail::LogBuffer log_buffer_;
 
 #else
@@ -459,7 +460,7 @@ namespace efp
 
     namespace detail
     {
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
 
 #else
         LocalLogger::LocalLogger()
@@ -495,7 +496,7 @@ namespace efp
         }
 #endif
 
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
 
 #else
         extern thread_local LocalLogger local_logger;
@@ -505,7 +506,7 @@ namespace efp
         template <typename... Args>
         inline void enqueue_log(LogLevel level, const char *fmt_str, Args... args)
         {
-#ifdef EFP_LOG_GLOBAL_BUFFER
+#if EFP_LOG_GLOBAL_BUFFER == true
             RtLog::instance().enqueue(level, fmt_str, args...);
 #else
             detail::local_logger.enqueue(level, fmt_str, args...);
