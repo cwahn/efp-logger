@@ -12,6 +12,8 @@
 #include "fmt/chrono.h"
 #include "fmt/color.h"
 
+#define EFP_LOG_GLOBAL_BUFFER
+
 namespace efp
 {
     // todo Make user could change the destination of log
@@ -150,6 +152,9 @@ namespace efp
 
             if (thread_.joinable())
                 thread_.join();
+
+            delete read_buffer;
+            delete write_buffer;
         }
 
         inline static RtLog &instance()
@@ -160,10 +165,18 @@ namespace efp
 
         void process()
         {
+#ifdef EFP_LOG_GLOBAL_BUFFER
+
+            swap_buffer();
+
+            while (!read_buffer->empty())
+            {
+                dequeue();
+            }
+
+#else
             const auto process_one = [](detail::LocalLogger *local_logger)
             {
-                local_logger->swap_buffer();
-
                 while (!local_logger->empty())
                 {
                     local_logger->dequeue();
@@ -171,6 +184,7 @@ namespace efp
             };
 
             for_each(process_one, local_loggers_);
+#endif
         }
 
         void process_with_time()
@@ -178,6 +192,16 @@ namespace efp
             const auto now = std::chrono::system_clock::now();
             const auto now_sec = std::chrono::time_point_cast<std::chrono::seconds>(now);
 
+#ifdef EFP_LOG_GLOBAL_BUFFER
+            // printf("running\n");
+            swap_buffer();
+
+            while (!read_buffer->empty())
+            {
+                dequeue_with_time(now_sec);
+            }
+
+#else
             const auto process_one = [&](detail::LocalLogger *local_logger)
             {
                 local_logger->swap_buffer();
@@ -189,12 +213,157 @@ namespace efp
             };
 
             for_each(process_one, local_loggers_);
+#endif
         }
 
         LogLevel level;
         bool with_time_stamp;
 
+#ifdef EFP_LOG_GLOBAL_BUFFER
+        void swap_buffer()
+        {
+            spinlock_.lock();
+
+            swap(write_buffer, read_buffer);
+
+            spinlock_.unlock();
+        }
+
+        template <typename A>
+        Unit enqueue_arg(A a)
+        {
+            write_buffer->push_back(a);
+            return unit;
+        }
+
+        template <typename... Args>
+        void enqueue(LogLevel level, const char *fmt_str, Args... args)
+        {
+            if (level >= this->level)
+            {
+                if (sizeof...(args) == 0)
+                {
+                    spinlock_.lock();
+
+                    write_buffer->push_back(
+                        detail::PlainString{
+                            fmt_str,
+                            level,
+                        });
+
+                    spinlock_.unlock();
+                }
+                else
+                {
+                    spinlock_.lock();
+
+                    write_buffer->push_back(
+                        detail::FormatString{
+                            fmt_str,
+                            sizeof...(args),
+                            level,
+                        });
+
+                    execute_pack(enqueue_arg(args)...);
+
+                    spinlock_.unlock();
+                }
+            }
+        }
+
+        void dequeue()
+        {
+            read_buffer->pop_front()
+                .match(
+                    [&](const detail::PlainString &str)
+                    {
+                        fmt::print(detail::log_level_print_style(str.level), "{} ", detail::log_level_cstr(str.level));
+                        fmt::print("{}", str.str);
+                        fmt::print("\n");
+                    },
+                    [&](const detail::FormatString &fstr)
+                    {
+                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+
+                        const auto store_arg = [&](size_t)
+                        {
+                            read_buffer->pop_front().match(
+                                [&](int arg)
+                                { dyn_store.push_back(arg); },
+                                [&](float arg)
+                                { dyn_store.push_back(arg); },
+                                [&](double arg)
+                                { dyn_store.push_back(arg); },
+                                [&](const char *arg)
+                                { dyn_store.push_back(arg); },
+                                [&](size_t arg)
+                                { dyn_store.push_back(arg); },
+                                //  Number of arguments are decided by number of argument, not parsing result.
+                                [&]()
+                                { fmt::println("potential error. this messege should not be displayed"); });
+                        };
+
+                        for_index(store_arg, fstr.arg_num);
+
+                        fmt::print(detail::log_level_print_style(fstr.level), "{} ", detail::log_level_cstr(fstr.level));
+                        fmt::vprint(fstr.fmt_str, dyn_store);
+                        fmt::print("\n");
+                    },
+                    []()
+                    { fmt::println("invalid log data. first data has to be format string"); });
+        }
+
+        void dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point)
+        {
+            read_buffer->pop_front()
+                .match(
+                    [&](const detail::PlainString &str)
+                    {
+                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                        fmt::print(detail::log_level_print_style(str.level), "{} ", detail::log_level_cstr(str.level));
+                        fmt::print("{}", str.str);
+                        fmt::print("\n");
+                    },
+                    [&](const detail::FormatString &fstr)
+                    {
+                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+
+                        const auto store_arg = [&](size_t)
+                        {
+                            read_buffer->pop_front().match(
+                                [&](int arg)
+                                { dyn_store.push_back(arg); },
+                                [&](float arg)
+                                { dyn_store.push_back(arg); },
+                                [&](double arg)
+                                { dyn_store.push_back(arg); },
+                                [&](const char *arg)
+                                { dyn_store.push_back(arg); },
+                                [&](size_t arg)
+                                { dyn_store.push_back(arg); },
+                                //  Number of arguments are decided by number of argument, not parsing result.
+                                [&]()
+                                { fmt::println("potential error. this messege should not be displayed"); });
+                        };
+
+                        for_index(store_arg, fstr.arg_num);
+
+                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                        fmt::print(detail::log_level_print_style(fstr.level), "{} ", detail::log_level_cstr(fstr.level));
+                        fmt::vprint(fstr.fmt_str, dyn_store);
+                        fmt::print("\n");
+                    },
+                    []()
+                    { fmt::println("invalid log data. first data has to be format string"); });
+        }
+#else
+
+#endif
+
     protected:
+#ifdef EFP_LOG_GLOBAL_BUFFER
+
+#else
         void add(detail::LocalLogger *local_logger)
         {
             std::lock_guard<std::mutex> lock(m_);
@@ -209,35 +378,51 @@ namespace efp
             if (maybe_idx)
                 local_loggers_.erase(maybe_idx.value());
         }
+#endif
 
     private:
         RtLog()
-            : with_time_stamp(true),
+            : read_buffer(new Vcq<detail::LogData, detail::local_buffer_size>{}),
+              write_buffer(new Vcq<detail::LogData, detail::local_buffer_size>{}),
+              with_time_stamp(true),
               run_(true),
               thread_(
                   [&]()
                   {
                       while (run_.load())
                       {
+                          //   printf("running");
                           // todo periodic
-                          std::this_thread::sleep_for(std::chrono::milliseconds{1});
                           if (with_time_stamp)
                               process_with_time();
                           else
                               process();
+
+                          std::this_thread::sleep_for(std::chrono::milliseconds{1});
                       }
                   })
         {
         }
 
+#ifdef EFP_LOG_GLOBAL_BUFFER
+        detail::Spinlock spinlock_;
+        Vcq<detail::LogData, detail::local_buffer_size> *write_buffer;
+        Vcq<detail::LogData, detail::local_buffer_size> *read_buffer;
+
+#else
         std::mutex m_;
         Vector<detail::LocalLogger *> local_loggers_;
+#endif
+
         std::atomic<bool> run_;
         std::thread thread_;
     };
 
     namespace detail
     {
+#ifdef EFP_LOG_GLOBAL_BUFFER
+
+#else
         LocalLogger::LocalLogger()
             : read_buffer(new Vcq<LogData, local_buffer_size>{}),
               write_buffer(new Vcq<LogData, local_buffer_size>{})
@@ -248,6 +433,8 @@ namespace efp
         LocalLogger::~LocalLogger()
         {
             RtLog::instance().remove(this);
+            delete read_buffer;
+            delete write_buffer;
         }
 
         void LocalLogger::swap_buffer()
@@ -391,39 +578,54 @@ namespace efp
         {
             return read_buffer->empty();
         }
+#endif
 
+#ifdef EFP_LOG_GLOBAL_BUFFER
+
+#else
         extern thread_local LocalLogger local_logger;
         thread_local LocalLogger local_logger{};
+#endif
+
+        template <typename... Args>
+        inline void enqueue_log(LogLevel level, const char *fmt_str, Args... args)
+        {
+#ifdef EFP_LOG_GLOBAL_BUFFER
+            RtLog::instance().enqueue(level, fmt_str, args...);
+#else
+            detail::local_logger.enqueue(level, fmt_str, args...);
+#endif
+        }
     }
 
     template <typename... Args>
     inline void debug(const char *fmt_str, Args... args)
     {
-        detail::local_logger.enqueue(LogLevel::Debug, fmt_str, args...);
+        detail::enqueue_log(LogLevel::Debug, fmt_str, args...);
     }
 
     template <typename... Args>
     inline void info(const char *fmt_str, Args... args)
     {
-        detail::local_logger.enqueue(LogLevel::Info, fmt_str, args...);
+        detail::enqueue_log(LogLevel::Info, fmt_str, args...);
     }
 
     template <typename... Args>
     inline void warn(const char *fmt_str, Args... args)
     {
-        detail::local_logger.enqueue(LogLevel::Warn, fmt_str, args...);
+        detail::enqueue_log(LogLevel::Warn, fmt_str, args...);
     }
 
     template <typename... Args>
     inline void error(const char *fmt_str, Args... args)
     {
-        detail::local_logger.enqueue(LogLevel::Error, fmt_str, args...);
+        detail::enqueue_log(LogLevel::Error, fmt_str, args...);
     }
 
     template <typename... Args>
     inline void fatal(const char *fmt_str, Args... args)
     {
-        detail::local_logger.enqueue(LogLevel::Fatal, fmt_str, args...);
+        detail::enqueue_log(LogLevel::Fatal, fmt_str, args...);
     }
 };
 
