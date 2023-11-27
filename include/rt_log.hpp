@@ -51,7 +51,7 @@ namespace efp
             }
         }
 
-        const fmt::text_style style_for_level(LogLevel level)
+        const fmt::text_style log_level_print_style(LogLevel level)
         {
             switch (level)
             {
@@ -93,6 +93,25 @@ namespace efp
             const char *,
             size_t>;
 
+        class Spinlock
+        {
+        public:
+            void lock()
+            {
+                while (flag_.test_and_set(std::memory_order_acquire))
+                {
+                }
+            }
+
+            void unlock()
+            {
+                flag_.clear(std::memory_order_release);
+            }
+
+        private:
+            std::atomic_flag flag_ = ATOMIC_FLAG_INIT;
+        };
+
         // Forward declaration of LocalLogger
         class LocalLogger
         {
@@ -114,7 +133,7 @@ namespace efp
             bool empty();
 
         private:
-            std::atomic_flag writing_flag_ = ATOMIC_FLAG_INIT;
+            Spinlock spinlock_;
             Vcq<LogData, local_buffer_size> *write_buffer;
             Vcq<LogData, local_buffer_size> *read_buffer;
         };
@@ -233,13 +252,11 @@ namespace efp
 
         void LocalLogger::swap_buffer()
         {
-            while (writing_flag_.test_and_set())
-            {
-            }
+            spinlock_.lock();
 
             swap(write_buffer, read_buffer);
 
-            writing_flag_.clear();
+            spinlock_.unlock();
         }
 
         template <typename A>
@@ -256,9 +273,7 @@ namespace efp
             {
                 if (sizeof...(args) == 0)
                 {
-                    while (writing_flag_.test_and_set())
-                    {
-                    }
+                    spinlock_.lock();
 
                     write_buffer->push_back(
                         detail::PlainString{
@@ -266,13 +281,11 @@ namespace efp
                             level,
                         });
 
-                    writing_flag_.clear();
+                    spinlock_.unlock();
                 }
                 else
                 {
-                    while (writing_flag_.test_and_set())
-                    {
-                    }
+                    spinlock_.lock();
 
                     write_buffer->push_back(
                         detail::FormatString{
@@ -283,7 +296,7 @@ namespace efp
 
                     execute_pack(enqueue_arg(args)...);
 
-                    writing_flag_.clear();
+                    spinlock_.unlock();
                 }
             }
         }
@@ -294,7 +307,7 @@ namespace efp
                 .match(
                     [&](const PlainString &str)
                     {
-                        fmt::print(style_for_level(str.level), "{} ", log_level_cstr(str.level));
+                        fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
                         fmt::print("{}", str.str);
                         fmt::print("\n");
                     },
@@ -322,7 +335,7 @@ namespace efp
 
                         for_index(store_arg, fstr.arg_num);
 
-                        fmt::print(style_for_level(fstr.level), "{} ", log_level_cstr(fstr.level));
+                        fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
                         fmt::vprint(fstr.fmt_str, dyn_store);
                         fmt::print("\n");
                     },
@@ -337,7 +350,7 @@ namespace efp
                     [&](const PlainString &str)
                     {
                         fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print(style_for_level(str.level), "{} ", log_level_cstr(str.level));
+                        fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
                         fmt::print("{}", str.str);
                         fmt::print("\n");
                     },
@@ -366,7 +379,7 @@ namespace efp
                         for_index(store_arg, fstr.arg_num);
 
                         fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print(style_for_level(fstr.level), "{} ", log_level_cstr(fstr.level));
+                        fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
                         fmt::vprint(fstr.fmt_str, dyn_store);
                         fmt::print("\n");
                     },
