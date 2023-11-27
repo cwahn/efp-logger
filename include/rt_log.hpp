@@ -114,6 +114,174 @@ namespace efp
             std::atomic_flag flag_ = ATOMIC_FLAG_INIT;
         };
 
+        class LogBuffer
+        {
+        public:
+            explicit LogBuffer()
+                : read_buffer_(new Vcq<detail::LogData, detail::local_buffer_size>{}),
+                  write_buffer_(new Vcq<detail::LogData, detail::local_buffer_size>{})
+            {
+            }
+
+            ~LogBuffer()
+            {
+                delete read_buffer_;
+                delete write_buffer_;
+            }
+
+            LogBuffer(const LogBuffer &other) = delete;
+            LogBuffer &operator=(const LogBuffer &other) = delete;
+
+            LogBuffer(LogBuffer &&other) noexcept = delete;
+            LogBuffer &operator=(LogBuffer &&other) noexcept = delete;
+
+            template <typename A>
+            Unit enqueue_arg(A a)
+            {
+                write_buffer_->push_back(a);
+                return unit;
+            }
+
+            template <typename... Args>
+            void enqueue(LogLevel level, const char *fmt_str, Args... args)
+            {
+                // ! temp
+                // if (level >= RtLog::instance().level)
+                // {
+                if (sizeof...(args) == 0)
+                {
+                    spinlock_.lock();
+
+                    write_buffer_->push_back(
+                        detail::PlainString{
+                            fmt_str,
+                            level,
+                        });
+
+                    spinlock_.unlock();
+                }
+                else
+                {
+                    spinlock_.lock();
+
+                    write_buffer_->push_back(
+                        detail::FormatString{
+                            fmt_str,
+                            sizeof...(args),
+                            level,
+                        });
+
+                    execute_pack(enqueue_arg(args)...);
+
+                    spinlock_.unlock();
+                }
+                // }
+            }
+
+            void swap_buffer()
+            {
+                spinlock_.lock();
+                swap(write_buffer_, read_buffer_);
+                spinlock_.unlock();
+            }
+
+            void dequeue()
+            {
+                read_buffer_->pop_front()
+                    .match(
+                        [&](const PlainString &str)
+                        {
+                            fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+                            fmt::print("{}", str.str);
+                            fmt::print("\n");
+                        },
+                        [&](const FormatString &fstr)
+                        {
+                            fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+
+                            const auto store_arg = [&](size_t)
+                            {
+                                read_buffer_->pop_front().match(
+                                    [&](int arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](float arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](double arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](const char *arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](size_t arg)
+                                    { dyn_store.push_back(arg); },
+                                    //  Number of arguments are decided by number of argument, not parsing result.
+                                    [&]()
+                                    { fmt::println("potential error. this messege should not be displayed"); });
+                            };
+
+                            for_index(store_arg, fstr.arg_num);
+
+                            fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+                            fmt::vprint(fstr.fmt_str, dyn_store);
+                            fmt::print("\n");
+                        },
+                        []()
+                        { fmt::println("invalid log data. first data has to be format string"); });
+            }
+
+            void dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point)
+            {
+                read_buffer_->pop_front()
+                    .match(
+                        [&](const PlainString &str)
+                        {
+                            fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                            fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+                            fmt::print("{}", str.str);
+                            fmt::print("\n");
+                        },
+                        [&](const FormatString &fstr)
+                        {
+                            fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+
+                            const auto store_arg = [&](size_t)
+                            {
+                                read_buffer_->pop_front().match(
+                                    [&](int arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](float arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](double arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](const char *arg)
+                                    { dyn_store.push_back(arg); },
+                                    [&](size_t arg)
+                                    { dyn_store.push_back(arg); },
+                                    //  Number of arguments are decided by number of argument, not parsing result.
+                                    [&]()
+                                    { fmt::println("potential error. this messege should not be displayed"); });
+                            };
+
+                            for_index(store_arg, fstr.arg_num);
+
+                            fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                            fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+                            fmt::vprint(fstr.fmt_str, dyn_store);
+                            fmt::print("\n");
+                        },
+                        []()
+                        { fmt::println("invalid log data. first data has to be format string"); });
+            }
+
+            bool empty()
+            {
+                return read_buffer_->empty();
+            }
+
+        private:
+            Spinlock spinlock_;
+            Vcq<LogData, local_buffer_size> *write_buffer_;
+            Vcq<LogData, local_buffer_size> *read_buffer_;
+        };
+
         // Forward declaration of LocalLogger
         class LocalLogger
         {
@@ -135,9 +303,10 @@ namespace efp
             bool empty();
 
         private:
-            Spinlock spinlock_;
-            Vcq<LogData, local_buffer_size> *write_buffer;
-            Vcq<LogData, local_buffer_size> *read_buffer;
+            // Spinlock spinlock_;
+            // Vcq<LogData, local_buffer_size> *write_buffer;
+            // Vcq<LogData, local_buffer_size> *read_buffer;
+            LogBuffer log_buffer_;
         };
     }
 
@@ -153,8 +322,8 @@ namespace efp
             if (thread_.joinable())
                 thread_.join();
 
-            delete read_buffer;
-            delete write_buffer;
+            // delete read_buffer;
+            // delete write_buffer;
         }
 
         inline static RtLog &instance()
@@ -167,11 +336,11 @@ namespace efp
         {
 #ifdef EFP_LOG_GLOBAL_BUFFER
 
-            swap_buffer();
+            log_buffer_.swap_buffer();
 
-            while (!read_buffer->empty())
+            while (!log_buffer_.empty())
             {
-                dequeue();
+                log_buffer_.dequeue();
             }
 
 #else
@@ -194,11 +363,11 @@ namespace efp
 
 #ifdef EFP_LOG_GLOBAL_BUFFER
             // printf("running\n");
-            swap_buffer();
+            log_buffer_.swap_buffer();
 
-            while (!read_buffer->empty())
+            while (!log_buffer_.empty())
             {
-                dequeue_with_time(now_sec);
+                log_buffer_.dequeue_with_time(now_sec);
             }
 
 #else
@@ -220,141 +389,144 @@ namespace efp
         bool with_time_stamp;
 
 #ifdef EFP_LOG_GLOBAL_BUFFER
-        void swap_buffer()
-        {
-            spinlock_.lock();
+        // void swap_buffer()
+        // {
+        //     spinlock_.lock();
 
-            swap(write_buffer, read_buffer);
+        //     swap(write_buffer, read_buffer);
 
-            spinlock_.unlock();
-        }
+        //     spinlock_.unlock();
+        // }
 
-        template <typename A>
-        Unit enqueue_arg(A a)
-        {
-            write_buffer->push_back(a);
-            return unit;
-        }
+        // template <typename A>
+        // Unit enqueue_arg(A a)
+        // {
+        //     write_buffer->push_back(a);
+        //     return unit;
+        // }
 
         template <typename... Args>
         void enqueue(LogLevel level, const char *fmt_str, Args... args)
         {
-            if (level >= this->level)
-            {
-                if (sizeof...(args) == 0)
-                {
-                    spinlock_.lock();
+            log_buffer_.enqueue(level, fmt_str, args...);
+            // if (level >= this->level)
+            // {
+            //     if (sizeof...(args) == 0)
+            //     {
+            //         spinlock_.lock();
 
-                    write_buffer->push_back(
-                        detail::PlainString{
-                            fmt_str,
-                            level,
-                        });
+            //         write_buffer->push_back(
+            //             detail::PlainString{
+            //                 fmt_str,
+            //                 level,
+            //             });
 
-                    spinlock_.unlock();
-                }
-                else
-                {
-                    spinlock_.lock();
+            //         spinlock_.unlock();
+            //     }
+            //     else
+            //     {
+            //         spinlock_.lock();
 
-                    write_buffer->push_back(
-                        detail::FormatString{
-                            fmt_str,
-                            sizeof...(args),
-                            level,
-                        });
+            //         write_buffer->push_back(
+            //             detail::FormatString{
+            //                 fmt_str,
+            //                 sizeof...(args),
+            //                 level,
+            //             });
 
-                    execute_pack(enqueue_arg(args)...);
+            //         execute_pack(enqueue_arg(args)...);
 
-                    spinlock_.unlock();
-                }
-            }
+            //         spinlock_.unlock();
+            //     }
+            // }
         }
 
         void dequeue()
         {
-            read_buffer->pop_front()
-                .match(
-                    [&](const detail::PlainString &str)
-                    {
-                        fmt::print(detail::log_level_print_style(str.level), "{} ", detail::log_level_cstr(str.level));
-                        fmt::print("{}", str.str);
-                        fmt::print("\n");
-                    },
-                    [&](const detail::FormatString &fstr)
-                    {
-                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+            log_buffer_.dequeue();
+            // read_buffer->pop_front()
+            //     .match(
+            //         [&](const detail::PlainString &str)
+            //         {
+            //             fmt::print(detail::log_level_print_style(str.level), "{} ", detail::log_level_cstr(str.level));
+            //             fmt::print("{}", str.str);
+            //             fmt::print("\n");
+            //         },
+            //         [&](const detail::FormatString &fstr)
+            //         {
+            //             fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
 
-                        const auto store_arg = [&](size_t)
-                        {
-                            read_buffer->pop_front().match(
-                                [&](int arg)
-                                { dyn_store.push_back(arg); },
-                                [&](float arg)
-                                { dyn_store.push_back(arg); },
-                                [&](double arg)
-                                { dyn_store.push_back(arg); },
-                                [&](const char *arg)
-                                { dyn_store.push_back(arg); },
-                                [&](size_t arg)
-                                { dyn_store.push_back(arg); },
-                                //  Number of arguments are decided by number of argument, not parsing result.
-                                [&]()
-                                { fmt::println("potential error. this messege should not be displayed"); });
-                        };
+            //             const auto store_arg = [&](size_t)
+            //             {
+            //                 read_buffer->pop_front().match(
+            //                     [&](int arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](float arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](double arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](const char *arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](size_t arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     //  Number of arguments are decided by number of argument, not parsing result.
+            //                     [&]()
+            //                     { fmt::println("potential error. this messege should not be displayed"); });
+            //             };
 
-                        for_index(store_arg, fstr.arg_num);
+            //             for_index(store_arg, fstr.arg_num);
 
-                        fmt::print(detail::log_level_print_style(fstr.level), "{} ", detail::log_level_cstr(fstr.level));
-                        fmt::vprint(fstr.fmt_str, dyn_store);
-                        fmt::print("\n");
-                    },
-                    []()
-                    { fmt::println("invalid log data. first data has to be format string"); });
+            //             fmt::print(detail::log_level_print_style(fstr.level), "{} ", detail::log_level_cstr(fstr.level));
+            //             fmt::vprint(fstr.fmt_str, dyn_store);
+            //             fmt::print("\n");
+            //         },
+            //         []()
+            //         { fmt::println("invalid log data. first data has to be format string"); });
         }
 
         void dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point)
         {
-            read_buffer->pop_front()
-                .match(
-                    [&](const detail::PlainString &str)
-                    {
-                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print(detail::log_level_print_style(str.level), "{} ", detail::log_level_cstr(str.level));
-                        fmt::print("{}", str.str);
-                        fmt::print("\n");
-                    },
-                    [&](const detail::FormatString &fstr)
-                    {
-                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+            log_buffer_.dequeue_with_time(time_point);
+            // read_buffer->pop_front()
+            //     .match(
+            //         [&](const detail::PlainString &str)
+            //         {
+            //             fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+            //             fmt::print(detail::log_level_print_style(str.level), "{} ", detail::log_level_cstr(str.level));
+            //             fmt::print("{}", str.str);
+            //             fmt::print("\n");
+            //         },
+            //         [&](const detail::FormatString &fstr)
+            //         {
+            //             fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
 
-                        const auto store_arg = [&](size_t)
-                        {
-                            read_buffer->pop_front().match(
-                                [&](int arg)
-                                { dyn_store.push_back(arg); },
-                                [&](float arg)
-                                { dyn_store.push_back(arg); },
-                                [&](double arg)
-                                { dyn_store.push_back(arg); },
-                                [&](const char *arg)
-                                { dyn_store.push_back(arg); },
-                                [&](size_t arg)
-                                { dyn_store.push_back(arg); },
-                                //  Number of arguments are decided by number of argument, not parsing result.
-                                [&]()
-                                { fmt::println("potential error. this messege should not be displayed"); });
-                        };
+            //             const auto store_arg = [&](size_t)
+            //             {
+            //                 read_buffer->pop_front().match(
+            //                     [&](int arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](float arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](double arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](const char *arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](size_t arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     //  Number of arguments are decided by number of argument, not parsing result.
+            //                     [&]()
+            //                     { fmt::println("potential error. this messege should not be displayed"); });
+            //             };
 
-                        for_index(store_arg, fstr.arg_num);
+            //             for_index(store_arg, fstr.arg_num);
 
-                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print(detail::log_level_print_style(fstr.level), "{} ", detail::log_level_cstr(fstr.level));
-                        fmt::vprint(fstr.fmt_str, dyn_store);
-                        fmt::print("\n");
-                    },
-                    []()
-                    { fmt::println("invalid log data. first data has to be format string"); });
+            //             fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+            //             fmt::print(detail::log_level_print_style(fstr.level), "{} ", detail::log_level_cstr(fstr.level));
+            //             fmt::vprint(fstr.fmt_str, dyn_store);
+            //             fmt::print("\n");
+            //         },
+            //         []()
+            //         { fmt::println("invalid log data. first data has to be format string"); });
         }
 #else
 
@@ -382,8 +554,8 @@ namespace efp
 
     private:
         RtLog()
-            : read_buffer(new Vcq<detail::LogData, detail::local_buffer_size>{}),
-              write_buffer(new Vcq<detail::LogData, detail::local_buffer_size>{}),
+            : // read_buffer(new Vcq<detail::LogData, detail::local_buffer_size>{}),
+              //   write_buffer(new Vcq<detail::LogData, detail::local_buffer_size>{}),
               with_time_stamp(true),
               run_(true),
               thread_(
@@ -405,9 +577,10 @@ namespace efp
         }
 
 #ifdef EFP_LOG_GLOBAL_BUFFER
-        detail::Spinlock spinlock_;
-        Vcq<detail::LogData, detail::local_buffer_size> *write_buffer;
-        Vcq<detail::LogData, detail::local_buffer_size> *read_buffer;
+        // detail::Spinlock spinlock_;
+        // Vcq<detail::LogData, detail::local_buffer_size> *write_buffer;
+        // Vcq<detail::LogData, detail::local_buffer_size> *read_buffer;
+        detail::LogBuffer log_buffer_;
 
 #else
         std::mutex m_;
@@ -424,8 +597,8 @@ namespace efp
 
 #else
         LocalLogger::LocalLogger()
-            : read_buffer(new Vcq<LogData, local_buffer_size>{}),
-              write_buffer(new Vcq<LogData, local_buffer_size>{})
+        // : read_buffer(new Vcq<LogData, local_buffer_size>{}),
+        //   write_buffer(new Vcq<LogData, local_buffer_size>{})
         {
             RtLog::instance().add(this);
         }
@@ -433,150 +606,154 @@ namespace efp
         LocalLogger::~LocalLogger()
         {
             RtLog::instance().remove(this);
-            delete read_buffer;
-            delete write_buffer;
+            // delete read_buffer;
+            // delete write_buffer;
         }
 
-        void LocalLogger::swap_buffer()
-        {
-            spinlock_.lock();
+        // void LocalLogger::swap_buffer()
+        // {
+        //     spinlock_.lock();
 
-            swap(write_buffer, read_buffer);
+        //     swap(write_buffer, read_buffer);
 
-            spinlock_.unlock();
-        }
+        //     spinlock_.unlock();
+        // }
 
-        template <typename A>
-        Unit LocalLogger::enqueue_arg(A a)
-        {
-            write_buffer->push_back(a);
-            return unit;
-        }
+        // template <typename A>
+        // Unit LocalLogger::enqueue_arg(A a)
+        // {
+        //     write_buffer->push_back(a);
+        //     return unit;
+        // }
 
         template <typename... Args>
         void LocalLogger::enqueue(LogLevel level, const char *fmt_str, Args... args)
         {
-            if (level >= RtLog::instance().level)
-            {
-                if (sizeof...(args) == 0)
-                {
-                    spinlock_.lock();
+            log_buffer_.enqueue(level, fmt_str, args...);
+            // if (level >= RtLog::instance().level)
+            // {
+            //     if (sizeof...(args) == 0)
+            //     {
+            //         spinlock_.lock();
 
-                    write_buffer->push_back(
-                        detail::PlainString{
-                            fmt_str,
-                            level,
-                        });
+            //         write_buffer->push_back(
+            //             detail::PlainString{
+            //                 fmt_str,
+            //                 level,
+            //             });
 
-                    spinlock_.unlock();
-                }
-                else
-                {
-                    spinlock_.lock();
+            //         spinlock_.unlock();
+            //     }
+            //     else
+            //     {
+            //         spinlock_.lock();
 
-                    write_buffer->push_back(
-                        detail::FormatString{
-                            fmt_str,
-                            sizeof...(args),
-                            level,
-                        });
+            //         write_buffer->push_back(
+            //             detail::FormatString{
+            //                 fmt_str,
+            //                 sizeof...(args),
+            //                 level,
+            //             });
 
-                    execute_pack(enqueue_arg(args)...);
+            //         execute_pack(enqueue_arg(args)...);
 
-                    spinlock_.unlock();
-                }
-            }
+            //         spinlock_.unlock();
+            //     }
+            // }
         }
 
         void LocalLogger::dequeue()
         {
-            read_buffer->pop_front()
-                .match(
-                    [&](const PlainString &str)
-                    {
-                        fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
-                        fmt::print("{}", str.str);
-                        fmt::print("\n");
-                    },
-                    [&](const FormatString &fstr)
-                    {
-                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+            log_buffer_.dequeue();
+            // read_buffer->pop_front()
+            //     .match(
+            //         [&](const PlainString &str)
+            //         {
+            //             fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+            //             fmt::print("{}", str.str);
+            //             fmt::print("\n");
+            //         },
+            //         [&](const FormatString &fstr)
+            //         {
+            //             fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
 
-                        const auto store_arg = [&](size_t)
-                        {
-                            read_buffer->pop_front().match(
-                                [&](int arg)
-                                { dyn_store.push_back(arg); },
-                                [&](float arg)
-                                { dyn_store.push_back(arg); },
-                                [&](double arg)
-                                { dyn_store.push_back(arg); },
-                                [&](const char *arg)
-                                { dyn_store.push_back(arg); },
-                                [&](size_t arg)
-                                { dyn_store.push_back(arg); },
-                                //  Number of arguments are decided by number of argument, not parsing result.
-                                [&]()
-                                { fmt::println("potential error. this messege should not be displayed"); });
-                        };
+            //             const auto store_arg = [&](size_t)
+            //             {
+            //                 read_buffer->pop_front().match(
+            //                     [&](int arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](float arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](double arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](const char *arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](size_t arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     //  Number of arguments are decided by number of argument, not parsing result.
+            //                     [&]()
+            //                     { fmt::println("potential error. this messege should not be displayed"); });
+            //             };
 
-                        for_index(store_arg, fstr.arg_num);
+            //             for_index(store_arg, fstr.arg_num);
 
-                        fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
-                        fmt::vprint(fstr.fmt_str, dyn_store);
-                        fmt::print("\n");
-                    },
-                    []()
-                    { fmt::println("invalid log data. first data has to be format string"); });
+            //             fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+            //             fmt::vprint(fstr.fmt_str, dyn_store);
+            //             fmt::print("\n");
+            //         },
+            //         []()
+            //         { fmt::println("invalid log data. first data has to be format string"); });
         }
 
         void LocalLogger::dequeue_with_time(const std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> &time_point)
         {
-            read_buffer->pop_front()
-                .match(
-                    [&](const PlainString &str)
-                    {
-                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
-                        fmt::print("{}", str.str);
-                        fmt::print("\n");
-                    },
-                    [&](const FormatString &fstr)
-                    {
-                        fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
+            log_buffer_.dequeue_with_time(time_point);
+            // read_buffer->pop_front()
+            //     .match(
+            //         [&](const PlainString &str)
+            //         {
+            //             fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+            //             fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+            //             fmt::print("{}", str.str);
+            //             fmt::print("\n");
+            //         },
+            //         [&](const FormatString &fstr)
+            //         {
+            //             fmt::dynamic_format_arg_store<fmt::format_context> dyn_store;
 
-                        const auto store_arg = [&](size_t)
-                        {
-                            read_buffer->pop_front().match(
-                                [&](int arg)
-                                { dyn_store.push_back(arg); },
-                                [&](float arg)
-                                { dyn_store.push_back(arg); },
-                                [&](double arg)
-                                { dyn_store.push_back(arg); },
-                                [&](const char *arg)
-                                { dyn_store.push_back(arg); },
-                                [&](size_t arg)
-                                { dyn_store.push_back(arg); },
-                                //  Number of arguments are decided by number of argument, not parsing result.
-                                [&]()
-                                { fmt::println("potential error. this messege should not be displayed"); });
-                        };
+            //             const auto store_arg = [&](size_t)
+            //             {
+            //                 read_buffer->pop_front().match(
+            //                     [&](int arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](float arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](double arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](const char *arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     [&](size_t arg)
+            //                     { dyn_store.push_back(arg); },
+            //                     //  Number of arguments are decided by number of argument, not parsing result.
+            //                     [&]()
+            //                     { fmt::println("potential error. this messege should not be displayed"); });
+            //             };
 
-                        for_index(store_arg, fstr.arg_num);
+            //             for_index(store_arg, fstr.arg_num);
 
-                        fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                        fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
-                        fmt::vprint(fstr.fmt_str, dyn_store);
-                        fmt::print("\n");
-                    },
-                    []()
-                    { fmt::println("invalid log data. first data has to be format string"); });
+            //             fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+            //             fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+            //             fmt::vprint(fstr.fmt_str, dyn_store);
+            //             fmt::print("\n");
+            //         },
+            //         []()
+            //         { fmt::println("invalid log data. first data has to be format string"); });
         }
 
         bool LocalLogger::empty()
         {
-            return read_buffer->empty();
+            log_buffer_.empty();
+            // return read_buffer->empty();
         }
 #endif
 
