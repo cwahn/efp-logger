@@ -166,6 +166,14 @@ namespace efp
                 return unit;
             }
 
+            // todo Need pointer casting specialization
+            // template <typename A>
+            // inline Unit enqueue_arg(A *a)
+            // {
+            //     write_buffer_->push_back((void *)(a));
+            //     return unit;
+            // }
+
             // Putting std::string will be O(n), potentially block other thread and fill out the buffer.
             inline Unit enqueue_arg(const std::string &a)
             {

@@ -8,12 +8,13 @@ int main()
     // Optional log level setting
     Logger::log_level = LogLevel::Debug;
 
-    printf("sizeof PlainString %u\n", sizeof(detail::PlainString));
-    printf("sizeof FormatString %u\n", sizeof(detail::FormatString));
-    printf("sizeof std::string %u\n", sizeof(std::string));
+    printf("sizeof PlainString %u bytes\n", sizeof(detail::PlainString));
+    printf("sizeof FormatString %u bytes\n", sizeof(detail::FormatString));
+    printf("The size of LogData: %u bytes\n", sizeof(detail::LogData));
+    printf("sizeof std::string %u bytes\n", sizeof(std::string));
 
     // Use the logging functions
-    debug("The size of LogData: {} bytes", sizeof(detail::LogData));
+    debug("The size of LogData: {} bytes", (void *)nullptr);
     info("This is a info message with a float: {}", 3.14f);
     warn("This is an warn message with a double: {}", 42);
     error("This is a error message with a string: {}", "error");
