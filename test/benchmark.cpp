@@ -8,12 +8,12 @@ int main()
 {
     const int num_message = 1'000'000; // Number of messages to log for the benchmark
 
-    // efp::RtLog::log_level = efp::LogLevel::Fatal;
+    // efp::Logger::log_level = efp::LogLevel::Fatal;
 
     // Start timer
     auto start = std::chrono::high_resolution_clock::now();
 
-    // RtLog messages in a loop
+    // Logger messages in a loop
     for (int i = 0; i < num_message; ++i)
     {
         efp::info("Logging message number: {}", i);

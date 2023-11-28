@@ -53,6 +53,8 @@ namespace efp
             case LogLevel::Fatal:
                 return "FATAL";
                 break;
+            default:
+                return "";
             }
         }
 
@@ -299,12 +301,12 @@ namespace efp
         };
     }
 
-    class RtLog
+    class Logger
     {
         friend class detail::LocalLogger;
 
     public:
-        ~RtLog()
+        ~Logger()
         {
             run_.store(false);
 
@@ -312,9 +314,9 @@ namespace efp
                 thread_.join();
         }
 
-        inline static RtLog &instance()
+        inline static Logger &instance()
         {
-            static RtLog inst{};
+            static Logger inst{};
             return inst;
         }
 
@@ -416,7 +418,7 @@ namespace efp
 #endif
 
     private:
-        RtLog()
+        Logger()
             : // with_time_stamp(true),
               run_(true),
               thread_(
@@ -448,7 +450,7 @@ namespace efp
         std::thread thread_;
     };
 
-    LogLevel RtLog::log_level = LogLevel::Debug;
+    LogLevel Logger::log_level = LogLevel::Debug;
 
     namespace detail
     {
@@ -457,12 +459,12 @@ namespace efp
 #else
         LocalLogger::LocalLogger()
         {
-            RtLog::instance().add(this);
+            Logger::instance().add(this);
         }
 
         LocalLogger::~LocalLogger()
         {
-            RtLog::instance().remove(this);
+            Logger::instance().remove(this);
         }
 
         template <typename... Args>
@@ -499,10 +501,10 @@ namespace efp
         inline void enqueue_log(LogLevel level, const char *fmt_str, Args... args)
         {
 
-            if (level >= RtLog::log_level)
+            if (level >= Logger::log_level)
             {
 #if EFP_LOG_GLOBAL_BUFFER == true
-                RtLog::instance().enqueue(level, fmt_str, args...);
+                Logger::instance().enqueue(level, fmt_str, args...);
 #else
                 detail::local_logger.enqueue(level, fmt_str, args...);
 #endif

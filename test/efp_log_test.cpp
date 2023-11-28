@@ -5,7 +5,7 @@ int main()
     using namespace efp;
 
     // Optional log level setting
-    RtLog::log_level = LogLevel::Info;
+    Logger::log_level = LogLevel::Info;
 
     // Use the logging functions
     debug("The size of LogData: {} bytes", sizeof(detail::LogData));
