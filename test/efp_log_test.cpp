@@ -6,12 +6,16 @@ int main()
     using namespace efp;
 
     // Optional log level setting
-    Logger::log_level = LogLevel::Info;
+    Logger::log_level = LogLevel::Debug;
+
+    printf("sizeof PlainString %u\n", sizeof(detail::PlainString));
+    printf("sizeof FormatString %u\n", sizeof(detail::FormatString));
+    printf("sizeof std::string %u\n", sizeof(std::string));
 
     // Use the logging functions
     debug("The size of LogData: {} bytes", sizeof(detail::LogData));
     info("This is a info message with a float: {}", 3.14f);
-    warn("This is an warn message with a double: {}", 2.71828);
+    warn("This is an warn message with a double: {}", 42);
     error("This is a error message with a string: {}", "error");
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 

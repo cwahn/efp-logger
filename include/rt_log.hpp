@@ -16,7 +16,7 @@
 #define EFP_LOG_GLOBAL_BUFFER true
 // todo Maybe optional runtime configuration
 #define EFP_LOG_TIME_STAMP true
-#define EFP_LOG_BUFFER_SIZE 128
+#define EFP_LOG_BUFFER_SIZE 256
 // todo Maybe compile time log-level
 // todo Processing period
 
@@ -24,7 +24,7 @@ namespace efp
 {
     // todo Make user could change the destination of log
 
-    enum class LogLevel : uint8_t
+    enum class LogLevel : char
     {
         Debug,
         Info,
@@ -91,17 +91,33 @@ namespace efp
             LogLevel level;
         };
 
+        struct StlString
+        {
+            uint8_t char_num;
+        };
+
         // todo Add all the argument types
         using LogData = Enum<
             PlainString,
             FormatString,
             int,
+            short,
+            long,
+            long long,
+            unsigned int,
+            unsigned short,
+            unsigned long,
+            unsigned long long,
+            char,
+            signed char,
+            unsigned char,
+            bool,
             float,
             double,
-            size_t,
-            // ! has to be compile time string.
+            long double,
             const char *,
-            std::string>;
+            void *,
+            StlString>;
 
         class Spinlock
         {
@@ -150,8 +166,21 @@ namespace efp
                 return unit;
             }
 
+            // Putting std::string will be O(n), potentially block other thread and fill out the buffer.
+            inline Unit enqueue_arg(const std::string &a)
+            {
+                const auto str_length = a.length();
+                write_buffer_->push_back(StlString{static_cast<uint8_t>(str_length)});
+
+                for_index([&](size_t i)
+                          { write_buffer_->push_back(a[i]); },
+                          str_length);
+
+                return unit;
+            }
+
             template <typename... Args>
-            inline void enqueue(LogLevel level, const char *fmt_str, Args... args)
+            inline void enqueue(LogLevel level, const char *fmt_str, const Args &...args)
             {
                 if (sizeof...(args) == 0)
                 {
@@ -192,24 +221,63 @@ namespace efp
                     read_buffer_->pop_front().match(
                         [&](int arg)
                         { dyn_args_.push_back(arg); },
+                        [&](short arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](long arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](long long arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](unsigned int arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](unsigned short arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](unsigned long arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](unsigned long long arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](char arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](signed char arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](unsigned char arg)
+                        { dyn_args_.push_back(arg); },
+                        [&](bool arg)
+                        { dyn_args_.push_back(arg); },
                         [&](float arg)
                         { dyn_args_.push_back(arg); },
                         [&](double arg)
                         { dyn_args_.push_back(arg); },
-                        [&](size_t arg)
+                        [&](long double arg)
                         { dyn_args_.push_back(arg); },
                         [&](const char *arg)
                         { dyn_args_.push_back(arg); },
-                        [&](std::string arg)
+                        [&](void *arg)
                         { dyn_args_.push_back(arg); },
-                        //  Number of arguments are decided by number of argument, not parsing result.
+                        [&](StlString arg)
+                        {
+                            std::string str;
+                            const auto add_char = [&](size_t i)
+                            {
+                                const auto maybe_ch = read_buffer_->pop_front();
+
+                                maybe_ch.match([&](char ch)
+                                               { str += ch; },
+                                               []()
+                                               { fmt::println("String reconstruction error"); });
+                            };
+
+                            for_index(add_char, arg.char_num);
+
+                            dyn_args_.push_back(str);
+                        },
                         [&]()
-                        { fmt::println("potential error. this messege should not be displayed"); });
+                        {
+                            fmt::println("potential error. this messege should not be displayed");
+                        });
                 };
 
                 for_index(collect_arg, arg_num);
             }
-
             void clear_dyn_args()
             {
                 dyn_args_.clear();
@@ -288,7 +356,7 @@ namespace efp
             Unit enqueue_arg(A a);
 
             template <typename... Args>
-            void enqueue(LogLevel level, const char *fmt_str, Args... args);
+            void enqueue(LogLevel level, const char *fmt_str, const Args &...args);
 
             void swap_buffer();
             void dequeue();
@@ -380,7 +448,7 @@ namespace efp
 #if EFP_LOG_GLOBAL_BUFFER == true
 
         template <typename... Args>
-        void enqueue(LogLevel level, const char *fmt_str, Args... args)
+        void enqueue(LogLevel level, const char *fmt_str, const Args &...args)
         {
             log_buffer_.enqueue(level, fmt_str, args...);
         }
@@ -469,7 +537,7 @@ namespace efp
         }
 
         template <typename... Args>
-        inline void LocalLogger::enqueue(LogLevel level, const char *fmt_str, Args... args)
+        inline void LocalLogger::enqueue(LogLevel level, const char *fmt_str, const Args &...args)
         {
             log_buffer_.enqueue(level, fmt_str, args...);
         }
@@ -498,7 +566,7 @@ namespace efp
 #endif
 
         template <typename... Args>
-        inline void enqueue_log(LogLevel level, const char *fmt_str, Args... args)
+        inline void enqueue_log(LogLevel level, const char *fmt_str, const Args &...args)
         {
 
             if (level >= Logger::log_level)
@@ -513,31 +581,31 @@ namespace efp
     }
 
     template <typename... Args>
-    inline void debug(const char *fmt_str, Args... args)
+    inline void debug(const char *fmt_str, const Args &...args)
     {
         detail::enqueue_log(LogLevel::Debug, fmt_str, args...);
     }
 
     template <typename... Args>
-    inline void info(const char *fmt_str, Args... args)
+    inline void info(const char *fmt_str, const Args &...args)
     {
         detail::enqueue_log(LogLevel::Info, fmt_str, args...);
     }
 
     template <typename... Args>
-    inline void warn(const char *fmt_str, Args... args)
+    inline void warn(const char *fmt_str, const Args &...args)
     {
         detail::enqueue_log(LogLevel::Warn, fmt_str, args...);
     }
 
     template <typename... Args>
-    inline void error(const char *fmt_str, Args... args)
+    inline void error(const char *fmt_str, const Args &...args)
     {
         detail::enqueue_log(LogLevel::Error, fmt_str, args...);
     }
 
     template <typename... Args>
-    inline void fatal(const char *fmt_str, Args... args)
+    inline void fatal(const char *fmt_str, const Args &...args)
     {
         detail::enqueue_log(LogLevel::Fatal, fmt_str, args...);
     }
