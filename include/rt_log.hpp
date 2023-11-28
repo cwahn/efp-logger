@@ -4,6 +4,7 @@
 #include <atomic>
 #include <thread>
 #include <chrono>
+#include <string>
 
 #include "efp.hpp"
 
@@ -97,8 +98,10 @@ namespace efp
             int,
             float,
             double,
+            size_t,
+            // ! has to be compile time string.
             const char *,
-            size_t>;
+            std::string>;
 
         class Spinlock
         {
@@ -141,31 +144,28 @@ namespace efp
             LogBuffer &operator=(LogBuffer &&other) noexcept = delete;
 
             template <typename A>
-            Unit enqueue_arg(A a)
+            inline Unit enqueue_arg(A a)
             {
                 write_buffer_->push_back(a);
                 return unit;
             }
 
             template <typename... Args>
-            void enqueue(LogLevel level, const char *fmt_str, Args... args)
+            inline void enqueue(LogLevel level, const char *fmt_str, Args... args)
             {
                 if (sizeof...(args) == 0)
                 {
                     spinlock_.lock();
-
                     write_buffer_->push_back(
                         detail::PlainString{
                             fmt_str,
                             level,
                         });
-
                     spinlock_.unlock();
                 }
                 else
                 {
                     spinlock_.lock();
-
                     write_buffer_->push_back(
                         detail::FormatString{
                             fmt_str,
@@ -174,7 +174,6 @@ namespace efp
                         });
 
                     execute_pack(enqueue_arg(args)...);
-
                     spinlock_.unlock();
                 }
             }
@@ -182,7 +181,7 @@ namespace efp
             void swap_buffer()
             {
                 spinlock_.lock();
-                swap(write_buffer_, read_buffer_);
+                efp::swap(write_buffer_, read_buffer_);
                 spinlock_.unlock();
             }
 
@@ -197,9 +196,11 @@ namespace efp
                         { dyn_args_.push_back(arg); },
                         [&](double arg)
                         { dyn_args_.push_back(arg); },
+                        [&](size_t arg)
+                        { dyn_args_.push_back(arg); },
                         [&](const char *arg)
                         { dyn_args_.push_back(arg); },
-                        [&](size_t arg)
+                        [&](std::string arg)
                         { dyn_args_.push_back(arg); },
                         //  Number of arguments are decided by number of argument, not parsing result.
                         [&]()
@@ -468,7 +469,7 @@ namespace efp
         }
 
         template <typename... Args>
-        void LocalLogger::enqueue(LogLevel level, const char *fmt_str, Args... args)
+        inline void LocalLogger::enqueue(LogLevel level, const char *fmt_str, Args... args)
         {
             log_buffer_.enqueue(level, fmt_str, args...);
         }
@@ -486,7 +487,6 @@ namespace efp
         bool LocalLogger::empty()
         {
             log_buffer_.empty();
-            // return read_buffer->empty();
         }
 #endif
 
