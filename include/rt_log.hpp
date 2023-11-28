@@ -171,7 +171,6 @@ namespace efp
             {
                 const auto str_length = a.length();
                 write_buffer_->push_back(StlString{static_cast<uint8_t>(str_length)});
-
                 for_index([&](size_t i)
                           { write_buffer_->push_back(a[i]); },
                           str_length);
