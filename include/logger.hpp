@@ -35,7 +35,7 @@ namespace efp
 
     namespace detail
     {
-        const char *log_level_cstr(LogLevel log_level)
+        inline const char *log_level_cstr(LogLevel log_level)
         {
             switch (log_level)
             {
@@ -59,7 +59,7 @@ namespace efp
             }
         }
 
-        const fmt::text_style log_level_print_style(LogLevel level)
+        inline const fmt::text_style log_level_print_style(LogLevel level)
         {
             switch (level)
             {
@@ -448,7 +448,7 @@ namespace efp
 #endif
         }
 
-        static LogLevel log_level;
+        LogLevel log_level;
         // bool with_time_stamp;
 
 #if EFP_LOG_GLOBAL_BUFFER == true
@@ -525,7 +525,7 @@ namespace efp
         std::thread thread_;
     };
 
-    LogLevel Logger::log_level = LogLevel::Debug;
+    // LogLevel Logger::instance().log_level = LogLevel::Debug;
 
     namespace detail
     {
@@ -575,7 +575,7 @@ namespace efp
         inline void enqueue_log(LogLevel level, const char *fmt_str, const Args &...args)
         {
 
-            if (level >= Logger::log_level)
+            if (level >= Logger::instance().log_level)
             {
 #if EFP_LOG_GLOBAL_BUFFER == true
                 Logger::instance().enqueue(level, fmt_str, args...);

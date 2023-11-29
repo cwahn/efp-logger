@@ -6,7 +6,7 @@ int main()
     using namespace efp;
 
     // Optional log level setting
-    Logger::log_level = LogLevel::Debug;
+    Logger::instance().log_level = LogLevel::Debug;
 
     printf("sizeof PlainMessage %lu bytes\n", sizeof(detail::PlainMessage));
     printf("sizeof FormatedMessage %lu bytes\n", sizeof(detail::FormatedMessage));
@@ -14,7 +14,7 @@ int main()
     printf("sizeof std::string %lu bytes\n", sizeof(std::string));
 
     // Use the logging functions
-    debug("The address of Logger::log_level: {:p}", (void *)&Logger::log_level);
+    debug("The address of Logger::log_level: {:p}", (void *)&Logger::instance().log_level );
     info("This is a info message with a float: {}", 3.14f);
     warn("This is an warn message with a int: {}", 42);
     error("This is a error message with a string literal: {}", "error");
