@@ -2,7 +2,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "rt_log.hpp"
+#include "logger.hpp"
 
 int main()
 {

@@ -65,5 +65,5 @@ Messages per second: 4.90641e+07
 
 ## Integration
 
-To use EFP RT Log, include `rt_log.hpp` in your project and ensure dependencies, especially the `fmt` library, are correctly linked.
+To use EFP RT Log, include `logger.hpp` in your project and ensure dependencies, especially the `fmt` library, are correctly linked.
 

@@ -1,21 +1,6 @@
 // #include "efp.hpp"
 // #include "fmt/core.h"
 
-// int main(int argc, char const *argv[])
-// {
-//     // ? Can I take arg num from runtime format string?
-//     fmt::print("fmt & efp::Enum test");
-
-//     using IorF = efp::Enum<int, float>;
-//     const IorF x = 42;
-
-//     fmt::print("this is {}", x);
-
-//     // ? Could Enum get formated correctly?
-
-//     return 0;
-// }
-
 #include <fmt/core.h>
 #include <fmt/args.h>
 #include <variant>
