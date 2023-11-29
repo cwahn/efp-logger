@@ -8,10 +8,10 @@ int main()
     // Optional log level setting
     Logger::log_level = LogLevel::Debug;
 
-    printf("sizeof PlainMessage %u bytes\n", sizeof(detail::PlainMessage));
-    printf("sizeof FormatedMessage %u bytes\n", sizeof(detail::FormatedMessage));
-    printf("The size of LogData: %u bytes\n", sizeof(detail::LogData));
-    printf("sizeof std::string %u bytes\n", sizeof(std::string));
+    printf("sizeof PlainMessage %lu bytes\n", sizeof(detail::PlainMessage));
+    printf("sizeof FormatedMessage %lu bytes\n", sizeof(detail::FormatedMessage));
+    printf("The size of LogData: %lu bytes\n", sizeof(detail::LogData));
+    printf("sizeof std::string %lu bytes\n", sizeof(std::string));
 
     // Use the logging functions
     debug("The address of Logger::log_level: {:p}", (void *)&Logger::log_level);
