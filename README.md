@@ -15,10 +15,11 @@ int main()
     Logger::log_level = LogLevel::Debug;
 
     // Use the logging functions
-    debug("The size of LogData: {} bytes", (void *)nullptr);
+    debug("The address of Logger::log_level: {:p}", (void *)&Logger::log_level);
     info("This is a info message with a float: {}", 3.14f);
-    warn("This is an warn message with a double: {}", 42);
-    error("This is a error message with a string: {}", "error");
+    warn("This is an warn message with a int: {}", 42);
+    error("This is a error message with a string literal: {}", "error");
+    // ! Sending std::string to the buffer is O(n) and may increase risk of buffer overflow
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 
     // Since the logging is done in a separate thread, wait for a while to see the logs
@@ -29,11 +30,11 @@ int main()
 ```
 
 ```log
-2023-11-26 16:25:27 DEBUG The size of LogData: 24 bytes
-2023-11-26 16:25:27 INFO  The size of FormatString: 16 bytes
-2023-11-26 16:25:27 WARN  This is a warning message with a float: 3.14
-2023-11-26 16:25:27 ERROR This is an error message with a double: 2.71828
-2023-11-26 16:25:27 FATAL This is a fatal message with a string: fatal error
+2023-11-29 01:16:46 DEBUG The address of Logger::log_level: 0x1029c8870
+2023-11-29 01:16:46 INFO  This is a info message with a float: 3.14
+2023-11-29 01:16:46 WARN  This is an warn message with a int: 42
+2023-11-29 01:16:46 ERROR This is a error message with a string literal: error
+2023-11-29 01:16:46 FATAL This is a fatal message with a std::string: fatal error
 ```
 
 ## Features
@@ -58,6 +59,9 @@ Logged 1000000 messages in 0.0203815 seconds.
 Average time per message: 2.03815e-08 seconds.
 Messages per second: 4.90641e+07
 ```
+
+## Todo
+- Pointer type auto conversion to void *
 
 ## Integration
 

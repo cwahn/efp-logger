@@ -26,13 +26,13 @@ using namespace efp;
 
 // Assume we have a variant type that can hold int, float, and std::string
 
-struct FormatString
+struct FormatedMessage
 {
     const char *fmt_str;
     size_t arg_num;
 };
 
-using LogData = efp::Enum<FormatString, int, double>;
+using LogData = efp::Enum<FormatedMessage, int, double>;
 
 Vcq<LogData, 32> log_datas{};
 
@@ -48,7 +48,7 @@ void enqueue_log(const char *fmt_str, As... as)
 {
     const size_t arg_num = sizeof...(as);
 
-    log_datas.push_back(FormatString{fmt_str, arg_num});
+    log_datas.push_back(FormatedMessage{fmt_str, arg_num});
 
     efp::execute_pack(enqueue_log_impl(as)...);
 }
@@ -59,7 +59,7 @@ void dequeue_log()
 {
     log_datas.pop_front()
         .match(
-            [](const FormatString &fstr)
+            [](const FormatedMessage &fstr)
             {
                 fmt::dynamic_format_arg_store<fmt::format_context> store;
 

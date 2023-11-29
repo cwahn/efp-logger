@@ -78,28 +78,28 @@ namespace efp
             }
         }
 
-        struct PlainString
+        struct PlainMessage
         {
             const char *str;
             LogLevel level;
         };
 
-        struct FormatString
+        struct FormatedMessage
         {
             const char *fmt_str;
             uint8_t arg_num;
             LogLevel level;
         };
 
-        struct StlString
+        struct StlStringArg
         {
             uint8_t char_num;
         };
 
         // todo Add all the argument types
         using LogData = Enum<
-            PlainString,
-            FormatString,
+            PlainMessage,
+            FormatedMessage,
             int,
             short,
             long,
@@ -117,19 +117,19 @@ namespace efp
             long double,
             const char *,
             void *,
-            StlString>;
+            StlStringArg>;
 
         class Spinlock
         {
         public:
-            void lock()
+            inline void lock()
             {
                 while (flag_.test_and_set(std::memory_order_acquire))
                 {
                 }
             }
 
-            void unlock()
+            inline void unlock()
             {
                 flag_.clear(std::memory_order_release);
             }
@@ -170,7 +170,7 @@ namespace efp
             // template <typename A>
             // inline Unit enqueue_arg(A *a)
             // {
-            //     write_buffer_->push_back((void *)(a));
+            //     write_buffer_->push_back((void *)a);
             //     return unit;
             // }
 
@@ -178,7 +178,7 @@ namespace efp
             inline Unit enqueue_arg(const std::string &a)
             {
                 const auto str_length = a.length();
-                write_buffer_->push_back(StlString{static_cast<uint8_t>(str_length)});
+                write_buffer_->push_back(StlStringArg{static_cast<uint8_t>(str_length)});
                 for_index([&](size_t i)
                           { write_buffer_->push_back(a[i]); },
                           str_length);
@@ -193,7 +193,7 @@ namespace efp
                 {
                     spinlock_.lock();
                     write_buffer_->push_back(
-                        detail::PlainString{
+                        detail::PlainMessage{
                             fmt_str,
                             level,
                         });
@@ -203,7 +203,7 @@ namespace efp
                 {
                     spinlock_.lock();
                     write_buffer_->push_back(
-                        detail::FormatString{
+                        detail::FormatedMessage{
                             fmt_str,
                             sizeof...(args),
                             level,
@@ -260,19 +260,18 @@ namespace efp
                         { dyn_args_.push_back(arg); },
                         [&](void *arg)
                         { dyn_args_.push_back(arg); },
-                        [&](StlString arg)
+                        [&](StlStringArg arg)
                         {
                             std::string str;
+
                             const auto add_char = [&](size_t i)
                             {
-                                const auto maybe_ch = read_buffer_->pop_front();
-
-                                maybe_ch.match([&](char ch)
-                                               { str += ch; },
-                                               []()
-                                               { fmt::println("String reconstruction error"); });
+                                read_buffer_->pop_front()
+                                    .match([&](char ch)
+                                           { str += ch; },
+                                           []()
+                                           { fmt::println("String reconstruction error"); });
                             };
-
                             for_index(add_char, arg.char_num);
 
                             dyn_args_.push_back(str);
@@ -294,13 +293,13 @@ namespace efp
             {
                 read_buffer_->pop_front()
                     .match(
-                        [&](const PlainString &str)
+                        [&](const PlainMessage &str)
                         {
                             fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
                             fmt::print("{}", str.str);
                             fmt::print("\n");
                         },
-                        [&](const FormatString &fstr)
+                        [&](const FormatedMessage &fstr)
                         {
                             collect_dyn_args(fstr.arg_num);
 
@@ -318,14 +317,14 @@ namespace efp
             {
                 read_buffer_->pop_front()
                     .match(
-                        [&](const PlainString &str)
+                        [&](const PlainMessage &str)
                         {
                             fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
                             fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
                             fmt::print("{}", str.str);
                             fmt::print("\n");
                         },
-                        [&](const FormatString &fstr)
+                        [&](const FormatedMessage &fstr)
                         {
                             collect_dyn_args(fstr.arg_num);
 
