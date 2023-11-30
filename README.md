@@ -1,8 +1,8 @@
-# EFP RtLog 
+# EFP Logger
 
 ## Overview
 
-EFP RT Log is a C++ logging library designed for real-time concurrency application. The typical log-writing takes only "tens of nano seconds". 
+EFP Logger is a C++ logging library designed for real-time concurrency application. The typical log-writing takes only "tens of nano seconds". 
 
 ## Exmaple
 
@@ -12,12 +12,13 @@ int main()
     using namespace efp;
 
     // Optional log level setting
-    Logger::log_level = LogLevel::Debug;
+    Logger::instance().log_level = LogLevel::Trace;
 
     // Use the logging functions
-    debug("The address of Logger::log_level: {:p}", (void *)&Logger::log_level);
+    trace("This is a trace message with no formating");
+    debug("This is a debug message with a pointer: {:p}", (void *)&Logger::instance().log_level );
     info("This is a info message with a float: {}", 3.14f);
-    warn("This is an warn message with a int: {}", 42);
+    warn("This is a warn message with a int: {}", 42);
     error("This is a error message with a string literal: {}", "error");
     // ! Sending std::string to the buffer is O(n) and may increase risk of buffer overflow
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
@@ -30,11 +31,12 @@ int main()
 ```
 
 ```log
-2023-11-29 01:16:46 DEBUG The address of Logger::log_level: 0x1029c8870
-2023-11-29 01:16:46 INFO  This is a info message with a float: 3.14
-2023-11-29 01:16:46 WARN  This is an warn message with a int: 42
-2023-11-29 01:16:46 ERROR This is a error message with a string literal: error
-2023-11-29 01:16:46 FATAL This is a fatal message with a std::string: fatal error
+2023-11-30 16:32:00 TRACE This is a trace message with no formating
+2023-11-30 16:32:00 DEBUG This is a debug message with a pointer: 0x104c44000
+2023-11-30 16:32:00 INFO  This is a info message with a float: 3.14
+2023-11-30 16:32:00 WARN  This is a warn message with a int: 42
+2023-11-30 16:32:00 ERROR This is a error message with a string literal: error
+2023-11-30 16:32:00 FATAL This is a fatal message with a std::string: fatal errorerror
 ```
 
 ## Features
