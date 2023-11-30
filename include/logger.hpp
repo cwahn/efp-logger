@@ -26,11 +26,13 @@ namespace efp
 
     enum class LogLevel : char
     {
+        Trace,
         Debug,
         Info,
         Warn,
         Error,
         Fatal,
+        Off,
     };
 
     namespace detail
@@ -39,6 +41,9 @@ namespace efp
         {
             switch (log_level)
             {
+            case LogLevel::Trace:
+                return "TRACE";
+                break;
             case LogLevel::Debug:
                 return "DEBUG";
                 break;
@@ -63,6 +68,8 @@ namespace efp
         {
             switch (level)
             {
+            case LogLevel::Trace:
+                return fg(fmt::color::snow);
             case LogLevel::Debug:
                 return fg(fmt::color::dodger_blue);
             case LogLevel::Info:
@@ -91,9 +98,21 @@ namespace efp
             LogLevel level;
         };
 
-        struct StlStringArg
+        constexpr uint8_t stl_string_data_capacity = sizeof(FormatedMessage);
+        constexpr uint8_t stl_string_head_capacity = stl_string_data_capacity - 1;
+
+        // Data structure for std::string preventing each char takes size of full Enum;
+        struct StlStringHead
         {
-            uint8_t char_num;
+            uint8_t length;
+            char chars[stl_string_head_capacity];
+        };
+
+        // Data structure for std::string preventing each char takes size of full Enum;
+        // Some of the char may not be valid depending on the length specified by head
+        struct StlStringData
+        {
+            char chars[stl_string_data_capacity];
         };
 
         // todo Add all the argument types
@@ -117,7 +136,8 @@ namespace efp
             long double,
             const char *,
             void *,
-            StlStringArg>;
+            StlStringHead,
+            StlStringData>;
 
         class Spinlock
         {
@@ -167,21 +187,35 @@ namespace efp
             }
 
             // todo Need pointer casting specialization
-            // template <typename A>
-            // inline Unit enqueue_arg(A *a)
-            // {
-            //     write_buffer_->push_back((void *)a);
-            //     return unit;
-            // }
-
-            // Putting std::string will be O(n), potentially block other thread and fill out the buffer.
             inline Unit enqueue_arg(const std::string &a)
             {
-                const auto str_length = a.length();
-                write_buffer_->push_back(StlStringArg{static_cast<uint8_t>(str_length)});
-                for_index([&](size_t i)
-                          { write_buffer_->push_back(a[i]); },
-                          str_length);
+                const uint8_t str_length = a.length();
+
+                StlStringHead head{};
+                uint8_t chars_in_head = str_length < stl_string_head_capacity ? str_length : stl_string_head_capacity;
+                memcpy(head.chars, a.data(), chars_in_head);
+                head.length = static_cast<uint8_t>(chars_in_head);
+
+                write_buffer_->push_back(head);
+
+                if (str_length > stl_string_head_capacity)
+                {
+                    int remaining_length = str_length - chars_in_head;
+                    uint8_t offset = chars_in_head;
+
+                    while (remaining_length > 0)
+                    {
+                        StlStringData data{};
+                        uint8_t length_to_push = remaining_length < stl_string_data_capacity ? remaining_length : stl_string_data_capacity;
+
+                        memcpy(data.chars, a.data() + offset, length_to_push);
+
+                        write_buffer_->push_back(data);
+
+                        offset += length_to_push;
+                        remaining_length -= length_to_push;
+                    }
+                }
 
                 return unit;
             }
@@ -260,25 +294,30 @@ namespace efp
                         { dyn_args_.push_back(arg); },
                         [&](void *arg)
                         { dyn_args_.push_back(arg); },
-                        [&](StlStringArg arg)
+                        [&](const StlStringHead &arg)
                         {
                             std::string str;
+                            str.append(arg.chars, arg.length < stl_string_head_capacity ? arg.length : stl_string_head_capacity);
 
-                            const auto add_char = [&](size_t i)
+                            // Extracting the remaining parts of the string if necessary
+                            int remaining_length = arg.length - stl_string_head_capacity;
+                            while (remaining_length > 0)
                             {
                                 read_buffer_->pop_front()
-                                    .match([&](char ch)
-                                           { str += ch; },
+                                    .match([&](const StlStringData &d)
+                                           {
+                                               const uint8_t append_length = remaining_length < stl_string_data_capacity? remaining_length : stl_string_data_capacity ;
+                                               str.append(d.chars, append_length);
+                                               remaining_length -= append_length; },
                                            []()
                                            { fmt::println("String reconstruction error"); });
-                            };
-                            for_index(add_char, arg.char_num);
+                            }
 
                             dyn_args_.push_back(str);
                         },
                         [&]()
                         {
-                            fmt::println("potential error. this messege should not be displayed");
+                            fmt::println("Potential error. this messege should not be displayed");
                         });
                 };
 
@@ -584,6 +623,12 @@ namespace efp
 #endif
             }
         }
+    }
+
+    template <typename... Args>
+    inline void trace(const char *fmt_str, const Args &...args)
+    {
+        detail::enqueue_log(LogLevel::Trace, fmt_str, args...);
     }
 
     template <typename... Args>
