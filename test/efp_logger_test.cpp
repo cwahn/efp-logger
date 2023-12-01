@@ -5,8 +5,10 @@ int main()
 {
     using namespace efp;
 
-    // Optional log level setting
-    Logger::instance().log_level = LogLevel::Trace;
+    // Optional settings
+    Logger::set_log_level(LogLevel::Trace); // default is info
+    // Logger::set_output("./efp_logger_test.log");
+    Logger::set_output(stdout); // default is stdout
 
     printf("sizeof PlainMessage %lu bytes\n", sizeof(detail::PlainMessage));
     printf("sizeof FormatedMessage %lu bytes\n", sizeof(detail::FormatedMessage));
@@ -15,7 +17,7 @@ int main()
 
     // Use the logging functions
     trace("This is a trace message with no formating");
-    debug("This is a debug message with a pointer: {:p}", (void *)&Logger::instance().log_level );
+    debug("This is a debug message with a pointer: {:p}", (void *)nullptr);
     info("This is a info message with a float: {}", 3.14f);
     warn("This is a warn message with a int: {}", 42);
     error("This is a error message with a string literal: {}", "error");
@@ -23,7 +25,7 @@ int main()
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 
     // Since the logging is done in a separate thread, wait for a while to see the logs
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     return 0;
 }

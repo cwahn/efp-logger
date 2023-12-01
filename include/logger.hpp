@@ -5,6 +5,7 @@
 #include <thread>
 #include <chrono>
 #include <string>
+#include <cstdio>
 
 #include "efp.hpp"
 
@@ -22,8 +23,6 @@
 
 namespace efp
 {
-    // todo Make user could change the destination of log
-
     enum class LogLevel : char
     {
         Trace,
@@ -248,7 +247,7 @@ namespace efp
                 }
             }
 
-            void swap_buffer()
+            inline void swap_buffer()
             {
                 spinlock_.lock();
                 efp::swap(write_buffer_, read_buffer_);
@@ -334,17 +333,30 @@ namespace efp
                     .match(
                         [&](const PlainMessage &str)
                         {
-                            fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
-                            fmt::print("{}", str.str);
-                            fmt::print("\n");
+                            if (output_file_ == stdout)
+                            {
+                                fmt::print(output_file_, log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+                            }
+                            else
+                            {
+                                fmt::print(output_file_, "{} ", log_level_cstr(str.level));
+                            }
+                            fmt::print(output_file_, "{}", str.str);
+                            fmt::print(output_file_, "\n");
                         },
                         [&](const FormatedMessage &fstr)
                         {
                             collect_dyn_args(fstr.arg_num);
-
-                            fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
-                            fmt::vprint(fstr.fmt_str, dyn_args_);
-                            fmt::print("\n");
+                            if (output_file_ == stdout)
+                            {
+                                fmt::print(output_file_, log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+                            }
+                            else
+                            {
+                                fmt::print(output_file_, "{} ", log_level_cstr(fstr.level));
+                            }
+                            fmt::vprint(output_file_, fstr.fmt_str, dyn_args_);
+                            fmt::print(output_file_, "\n");
 
                             clear_dyn_args();
                         },
@@ -358,19 +370,35 @@ namespace efp
                     .match(
                         [&](const PlainMessage &str)
                         {
-                            fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                            fmt::print(log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
-                            fmt::print("{}", str.str);
-                            fmt::print("\n");
+                            if (output_file_ == stdout)
+                            {
+                                fmt::print(output_file_, fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                                fmt::print(output_file_, log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+                            }
+                            else
+                            {
+                                fmt::print(output_file_, "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                                fmt::print(output_file_, "{} ", log_level_cstr(str.level));
+                            }
+                            fmt::print(output_file_, "{}", str.str);
+                            fmt::print(output_file_, "\n");
                         },
                         [&](const FormatedMessage &fstr)
                         {
                             collect_dyn_args(fstr.arg_num);
 
-                            fmt::print(fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                            fmt::print(log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
-                            fmt::vprint(fstr.fmt_str, dyn_args_);
-                            fmt::print("\n");
+                            if (output_file_ == stdout)
+                            {
+                                fmt::print(output_file_, fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                                fmt::print(output_file_, log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+                            }
+                            else
+                            {
+                                fmt::print(output_file_, "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                                fmt::print(output_file_, "{} ", log_level_cstr(fstr.level));
+                            }
+                            fmt::vprint(output_file_, fstr.fmt_str, dyn_args_);
+                            fmt::print(output_file_, "\n");
 
                             clear_dyn_args();
                         },
@@ -378,9 +406,24 @@ namespace efp
                         { fmt::println("invalid log data. first data has to be format string"); });
             }
 
-            bool empty()
+            inline bool empty()
             {
                 return read_buffer_->empty();
+            }
+
+            inline void set_output_file(FILE *output_file)
+            {
+                output_file_ = output_file;
+            }
+
+            inline void set_log_level(LogLevel log_level)
+            {
+                log_level_ = log_level;
+            }
+
+            inline LogLevel get_log_level()
+            {
+                return log_level_;
             }
 
         private:
@@ -388,6 +431,8 @@ namespace efp
             Vcq<LogData, EFP_LOG_BUFFER_SIZE> *write_buffer_;
             Vcq<LogData, EFP_LOG_BUFFER_SIZE> *read_buffer_;
             fmt::dynamic_format_arg_store<fmt::format_context> dyn_args_;
+            LogLevel log_level_ = LogLevel::Info;
+            std::FILE *output_file_ = stdout;
         };
 
         // Forward declaration of LocalLogger
@@ -415,6 +460,8 @@ namespace efp
         };
     }
 
+    // The main logger class
+
     class Logger
     {
         friend class detail::LocalLogger;
@@ -428,11 +475,59 @@ namespace efp
                 thread_.join();
         }
 
-        inline static Logger &instance()
+        static inline Logger &instance()
         {
             static Logger inst{};
             return inst;
         }
+
+        static inline void set_log_level(LogLevel log_level)
+        {
+#if EFP_LOG_GLOBAL_BUFFER
+            instance().log_buffer_.set_log_level(log_level);
+#else
+// todo Implement log output setup for local logger
+#endif
+        }
+
+        static inline LogLevel get_log_level()
+        {
+#if EFP_LOG_GLOBAL_BUFFER
+            return instance().log_buffer_.get_log_level();
+#else
+#endif
+        }
+
+        static void set_output(FILE *output_file)
+        {
+#if EFP_LOG_GLOBAL_BUFFER == true
+            instance().log_buffer_.set_output_file(output_file);
+#else
+// todo Implement log output setup for local logger
+#endif
+        }
+
+        static void set_output(const char *path)
+        {
+#if EFP_LOG_GLOBAL_BUFFER == true
+
+            FILE *output_file = fopen(path, "a");
+            if (output_file)
+            {
+                instance().log_buffer_.set_output_file(output_file);
+            }
+            else
+            {
+                printf("Can not open the ouput file");
+                abort();
+            }
+
+#else
+// todo Implement log output setup for local logger
+#endif
+        }
+
+        // todo set_config
 
         void process()
         {
@@ -487,7 +582,6 @@ namespace efp
 #endif
         }
 
-        LogLevel log_level;
         // bool with_time_stamp;
 
 #if EFP_LOG_GLOBAL_BUFFER == true
@@ -552,9 +646,10 @@ namespace efp
         {
         }
 
+        LogLevel log_level_;
+
 #if EFP_LOG_GLOBAL_BUFFER == true
         detail::LogBuffer log_buffer_;
-
 #else
         std::mutex m_;
         Vector<detail::LocalLogger *> local_loggers_;
@@ -613,15 +708,17 @@ namespace efp
         template <typename... Args>
         inline void enqueue_log(LogLevel level, const char *fmt_str, const Args &...args)
         {
-
-            if (level >= Logger::instance().log_level)
-            {
 #if EFP_LOG_GLOBAL_BUFFER == true
+            if (level >= Logger::get_log_level())
+            {
                 Logger::instance().enqueue(level, fmt_str, args...);
-#else
-                detail::local_logger.enqueue(level, fmt_str, args...);
-#endif
             }
+#else
+            if (level >= detail::local_logger::get_log_level())
+            {
+                detail::local_logger.enqueue(level, fmt_str, args...);
+            }
+#endif
         }
     }
 
