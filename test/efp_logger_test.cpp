@@ -10,7 +10,7 @@ int main()
     Logger::set_log_level(LogLevel::Trace);
 
     // Optional log output setting. // default is stdout
-    Logger::set_output("./efp_logger_test.log");
+    // Logger::set_output("./efp_logger_test.log");
     // Logger::set_output(stdout);
 
     printf("sizeof PlainMessage %lu bytes\n", sizeof(detail::PlainMessage));

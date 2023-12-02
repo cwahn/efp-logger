@@ -1,6 +1,0 @@
-[submodule "lib/efp"]
-	path = lib/efp
-	url = http://github.com/cwahn/efp
-[submodule "lib/fmt"]
-	path = lib/fmt
-	url = https://github.com/fmtlib/fmt.git
