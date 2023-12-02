@@ -1,14 +1,17 @@
 #include <string>
+
 #include "logger.hpp"
 
 int main()
 {
     using namespace efp;
 
-    // Optional settings
-    Logger::set_log_level(LogLevel::Trace); // default is info
-    // Logger::set_output("./efp_logger_test.log");
-    Logger::set_output(stdout); // default is stdout
+    // Optional log level setting. Default is LogLevel::Info
+    Logger::set_log_level(LogLevel::Trace);
+
+    // Optional log output setting. // default is stdout
+    Logger::set_output("./efp_logger_test.log");
+    // Logger::set_output(stdout);
 
     printf("sizeof PlainMessage %lu bytes\n", sizeof(detail::PlainMessage));
     printf("sizeof FormatedMessage %lu bytes\n", sizeof(detail::FormatedMessage));
@@ -22,6 +25,7 @@ int main()
     warn("This is a warn message with a int: {}", 42);
     error("This is a error message with a string literal: {}", "error");
     // ! Sending std::string to the buffer is O(n) and may increase risk of buffer overflow
+    // ! Every 20 ~ 30 char will take one buffer space.
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 
     // Since the logging is done in a separate thread, wait for a while to see the logs

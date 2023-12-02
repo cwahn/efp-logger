@@ -19,7 +19,7 @@
 #define EFP_LOG_TIME_STAMP true
 #define EFP_LOG_BUFFER_SIZE 256
 // todo Maybe compile time log-level
-// todo Processing period
+// todo Processing period configuration
 
 namespace efp
 {
@@ -114,7 +114,6 @@ namespace efp
             char chars[stl_string_data_capacity];
         };
 
-        // todo Add all the argument types
         using LogData = Enum<
             PlainMessage,
             FormatedMessage,
@@ -368,36 +367,36 @@ namespace efp
             {
                 read_buffer_->pop_front()
                     .match(
-                        [&](const PlainMessage &str)
+                        [&](const PlainMessage &msg)
                         {
                             if (output_file_ == stdout)
                             {
                                 fmt::print(output_file_, fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                                fmt::print(output_file_, log_level_print_style(str.level), "{} ", log_level_cstr(str.level));
+                                fmt::print(output_file_, log_level_print_style(msg.level), "{} ", log_level_cstr(msg.level));
                             }
                             else
                             {
                                 fmt::print(output_file_, "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                                fmt::print(output_file_, "{} ", log_level_cstr(str.level));
+                                fmt::print(output_file_, "{} ", log_level_cstr(msg.level));
                             }
-                            fmt::print(output_file_, "{}", str.str);
+                            fmt::print(output_file_, "{}", msg.str);
                             fmt::print(output_file_, "\n");
                         },
-                        [&](const FormatedMessage &fstr)
+                        [&](const FormatedMessage &msg)
                         {
-                            collect_dyn_args(fstr.arg_num);
+                            collect_dyn_args(msg.arg_num);
 
                             if (output_file_ == stdout)
                             {
                                 fmt::print(output_file_, fg(fmt::color::gray), "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                                fmt::print(output_file_, log_level_print_style(fstr.level), "{} ", log_level_cstr(fstr.level));
+                                fmt::print(output_file_, log_level_print_style(msg.level), "{} ", log_level_cstr(msg.level));
                             }
                             else
                             {
                                 fmt::print(output_file_, "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                                fmt::print(output_file_, "{} ", log_level_cstr(fstr.level));
+                                fmt::print(output_file_, "{} ", log_level_cstr(msg.level));
                             }
-                            fmt::vprint(output_file_, fstr.fmt_str, dyn_args_);
+                            fmt::vprint(output_file_, msg.fmt_str, dyn_args_);
                             fmt::print(output_file_, "\n");
 
                             clear_dyn_args();
@@ -435,6 +434,7 @@ namespace efp
             std::FILE *output_file_ = stdout;
         };
 
+        // ! Deprecated. Global log seems fast enough.
         // Forward declaration of LocalLogger
         class LocalLogger
         {
