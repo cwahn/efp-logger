@@ -11,32 +11,37 @@ int main()
 {
     using namespace efp;
 
-    // Optional log level setting
-    Logger::instance().log_level = LogLevel::Trace;
+    // Optional log level setting. Default is LogLevel::Info
+    Logger::set_log_level(LogLevel::Trace);
+
+    // Optional log output setting. // default is stdout
+    Logger::set_output("./efp_logger_test.log");
+    // Logger::set_output(stdout);
 
     // Use the logging functions
     trace("This is a trace message with no formating");
-    debug("This is a debug message with a pointer: {:p}", (void *)&Logger::instance().log_level );
+    debug("This is a debug message with a pointer: {:p}", (void *)nullptr);
     info("This is a info message with a float: {}", 3.14f);
     warn("This is a warn message with a int: {}", 42);
     error("This is a error message with a string literal: {}", "error");
     // ! Sending std::string to the buffer is O(n) and may increase risk of buffer overflow
+    // ! Every 20 ~ 30 char will take one buffer space.
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 
     // Since the logging is done in a separate thread, wait for a while to see the logs
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     return 0;
 }
 ```
 
 ```log
-2023-11-30 16:32:00 TRACE This is a trace message with no formating
-2023-11-30 16:32:00 DEBUG This is a debug message with a pointer: 0x104c44000
-2023-11-30 16:32:00 INFO  This is a info message with a float: 3.14
-2023-11-30 16:32:00 WARN  This is a warn message with a int: 42
-2023-11-30 16:32:00 ERROR This is a error message with a string literal: error
-2023-11-30 16:32:00 FATAL This is a fatal message with a std::string: fatal errorerror
+2023-12-02 03:25:28 TRACE This is a trace message with no formating
+2023-12-02 03:25:28 DEBUG This is a debug message with a pointer: 0x0
+2023-12-02 03:25:28 INFO  This is a info message with a float: 3.14
+2023-12-02 03:25:28 WARN  This is a warn message with a int: 42
+2023-12-02 03:25:28 ERROR This is a error message with a string literal: error
+2023-12-02 03:25:28 FATAL This is a fatal message with a std::string: fatal error
 ```
 
 ## Features
