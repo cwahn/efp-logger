@@ -1,6 +1,3 @@
-add_executable(fmt_enum_test fmt_enum_test.cpp)
-target_link_libraries(fmt_enum_test PRIVATE efp fmt)
-
 add_executable(efp_logger_test efp_logger_test.cpp)
 target_link_libraries(efp_logger_test PRIVATE efp_logger)
 
