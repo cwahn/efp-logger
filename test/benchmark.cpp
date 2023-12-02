@@ -6,7 +6,7 @@
 
 int main()
 {
-    const int num_message = 1'000'000; // Number of messages to log for the benchmark
+    const int num_message = 1000000; // Number of messages to log for the benchmark
 
     // efp::Logger::log_level = efp::LogLevel::Fatal;
 
