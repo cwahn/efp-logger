@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.5.0)
 project(efp_logger VERSION 0.1.0 LANGUAGES C CXX)
 
-# set(CMAKE_CXX_STANDARD 20)
-# set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 include(CTest)
 enable_testing()
 
@@ -30,6 +28,7 @@ if(NOT efp_FOUND)
     FetchContent_MakeAvailable(efp)
 endif()
 
+#fmt
 find_package(fmt QUIET)
 
 if(NOT fmt_FOUND)
