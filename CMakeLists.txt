@@ -16,7 +16,7 @@ if(NOT efp_FOUND)
     FetchContent_Declare(
         efp
         GIT_REPOSITORY http://github.com/cwahn/efp.git
-        GIT_TAG main
+        GIT_TAG dev/trait
     )
     FetchContent_MakeAvailable(efp)
 endif()
