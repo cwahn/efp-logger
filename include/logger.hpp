@@ -528,6 +528,7 @@ private:
             // todo periodic
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
           }
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
 #if EFP_LOG_TIME_STAMP == true
           process_with_time();
           process_with_time();
