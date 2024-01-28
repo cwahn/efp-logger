@@ -383,12 +383,6 @@ public:
 
     if (thread_.joinable())
       thread_.join();
-
-#if EFP_LOG_TIME_STAMP == true
-    process_with_time();
-#else
-    process();
-#endif
   }
 
   static inline Logger &instance() {
@@ -534,6 +528,13 @@ private:
             // todo periodic
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
           }
+#if EFP_LOG_TIME_STAMP == true
+          process_with_time();
+          process_with_time();
+#else
+          process();
+          process();
+#endif
         }) {
   }
 
