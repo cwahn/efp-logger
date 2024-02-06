@@ -1,0 +1,5 @@
+add_executable(efp_logger_example efp_logger_example.cpp)
+target_link_libraries(efp_logger_example PRIVATE efp_logger)
+
+add_executable(efp_logger_benchmark benchmark.cpp)
+target_link_libraries(efp_logger_benchmark PRIVATE efp_logger)
