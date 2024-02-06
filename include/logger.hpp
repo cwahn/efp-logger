@@ -399,30 +399,19 @@ public:
   }
 
   static inline void set_log_level(LogLevel log_level) {
-#if EFP_LOG_GLOBAL_BUFFER
+
     instance().log_buffer_.set_log_level(log_level);
-#else
-// todo Implement log output setup for local logger
-#endif
   }
 
   static inline LogLevel get_log_level() {
-#if EFP_LOG_GLOBAL_BUFFER
     return instance().log_buffer_.get_log_level();
-#else
-#endif
   }
 
   static void set_output(FILE *output_file) {
-#if EFP_LOG_GLOBAL_BUFFER == true
     instance().log_buffer_.set_output_file(output_file);
-#else
-// todo Implement log output setup for local logger
-#endif
   }
 
   static void set_output(const char *path) {
-#if EFP_LOG_GLOBAL_BUFFER == true
 
     FILE *output_file = fopen(path, "a");
     if (output_file) {
@@ -431,32 +420,17 @@ public:
       printf("Can not open the ouput file");
       abort();
     }
-
-#else
-// todo Implement log output setup for local logger
-#endif
   }
 
   // todo set_config
 
   void process() {
-#if EFP_LOG_GLOBAL_BUFFER == true
 
     log_buffer_.swap_buffer();
 
     while (!log_buffer_.empty()) {
       log_buffer_.dequeue();
     }
-
-#else
-    const auto process_one = [](detail::LocalLogger *local_logger) {
-      while (!local_logger->empty()) {
-        local_logger->dequeue();
-      }
-    };
-
-    for_each(process_one, local_loggers_);
-#endif
   }
 
   void process_with_time() {
@@ -464,30 +438,15 @@ public:
     const auto now_sec =
         std::chrono::time_point_cast<std::chrono::seconds>(now);
 
-#if EFP_LOG_GLOBAL_BUFFER == true
     // printf("running\n");
     log_buffer_.swap_buffer();
 
     while (!log_buffer_.empty()) {
       log_buffer_.dequeue_with_time(now_sec);
     }
-
-#else
-    const auto process_one = [&](detail::LocalLogger *local_logger) {
-      local_logger->swap_buffer();
-
-      while (!local_logger->empty()) {
-        local_logger->dequeue_with_time(now_sec);
-      }
-    };
-
-    for_each(process_one, local_loggers_);
-#endif
   }
 
   // bool with_time_stamp;
-
-#if EFP_LOG_GLOBAL_BUFFER == true
 
   template <typename... Args>
   void enqueue(LogLevel level, const char *fmt_str, const Args &...args) {
@@ -501,28 +460,8 @@ public:
                                     std::chrono::seconds> &time_point) {
     log_buffer_.dequeue_with_time(time_point);
   }
-#else
-
-#endif
 
 protected:
-#if EFP_LOG_GLOBAL_BUFFER == true
-
-#else
-  void add(detail::LocalLogger *local_logger) {
-    std::lock_guard<std::mutex> lock(m_);
-    local_loggers_.push_back(local_logger);
-  }
-
-  void remove(detail::LocalLogger *local_logger) {
-    std::lock_guard<std::mutex> lock(m_);
-
-    const auto maybe_idx = elem_index(local_logger, local_loggers_);
-    if (maybe_idx)
-      local_loggers_.erase(maybe_idx.value());
-  }
-#endif
-
 private:
   Logger()
       : // with_time_stamp(true),
@@ -541,12 +480,7 @@ private:
 
   LogLevel log_level_;
 
-#if EFP_LOG_GLOBAL_BUFFER == true
   detail::LogBuffer log_buffer_;
-#else
-  std::mutex m_;
-  Vector<detail::LocalLogger *> local_loggers_;
-#endif
 
   std::atomic<bool> run_;
   std::thread thread_;
@@ -555,36 +489,6 @@ private:
 // LogLevel Logger::instance().log_level = LogLevel::Debug;
 
 namespace detail {
-#if EFP_LOG_GLOBAL_BUFFER == true
-
-#else
-LocalLogger::LocalLogger() { Logger::instance().add(this); }
-
-LocalLogger::~LocalLogger() { Logger::instance().remove(this); }
-
-template <typename... Args>
-inline void LocalLogger::enqueue(LogLevel level, const char *fmt_str,
-                                 const Args &...args) {
-  log_buffer_.enqueue(level, fmt_str, args...);
-}
-
-void LocalLogger::dequeue() { log_buffer_.dequeue(); }
-
-void LocalLogger::dequeue_with_time(
-    const std::chrono::time_point<std::chrono::system_clock,
-                                  std::chrono::seconds> &time_point) {
-  log_buffer_.dequeue_with_time(time_point);
-}
-
-bool LocalLogger::empty() { log_buffer_.empty(); }
-#endif
-
-#if EFP_LOG_GLOBAL_BUFFER == true
-
-#else
-extern thread_local LocalLogger local_logger;
-thread_local LocalLogger local_logger{};
-#endif
 
 template <typename... Args>
 inline void enqueue_log(LogLevel level, const char *fmt_str,
