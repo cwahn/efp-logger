@@ -19,6 +19,8 @@
 // todo Maybe compile time log-level
 // todo Processing period configuration
 
+// #define EFP_LOG_COUNT false
+
 namespace efp {
     enum class LogLevel : char {
         Trace,
@@ -406,6 +408,9 @@ namespace efp {
 
             while (!_log_buffer.empty()) {
                 _log_buffer.dequeue();
+#if EFP_LOG_COUNT == true
+                log_count++;
+#endif
             }
         }
 
@@ -419,6 +424,9 @@ namespace efp {
 
             while (!_log_buffer.empty()) {
                 _log_buffer.dequeue_with_time(now_sec);
+#if EFP_LOG_COUNT == true
+                log_count++;
+#endif
             }
         }
 
@@ -437,7 +445,9 @@ namespace efp {
             _log_buffer.dequeue_with_time(time_point);
         }
 
-    protected:
+#if EFP_LOG_COUNT == true
+        int log_count = 0;
+#endif
     private:
         Logger()
             : // with_time_stamp(true),
