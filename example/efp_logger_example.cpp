@@ -28,8 +28,9 @@ int main()
     // ! Every 20 ~ 30 char will take one buffer space.
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 
-    // Since the logging is done in a separate thread, wait for a while to see the logs
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // // Since the logging is done in a separate thread, wait for a while to see the logs
+    // No longer needed, since the destructor will call the processing
+    // std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     return 0;
 }
