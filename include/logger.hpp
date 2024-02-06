@@ -123,12 +123,12 @@ namespace efp {
         class LogBuffer {
         public:
             explicit LogBuffer()
-                : read_buffer_(new Vcq<detail::LogData, EFP_LOG_BUFFER_SIZE>{}),
-                  write_buffer_(new Vcq<detail::LogData, EFP_LOG_BUFFER_SIZE>{}) {}
+                : _read_buffer(new Vcq<detail::LogData, EFP_LOG_BUFFER_SIZE>{}),
+                  _write_buffer(new Vcq<detail::LogData, EFP_LOG_BUFFER_SIZE>{}) {}
 
             ~LogBuffer() {
-                delete read_buffer_;
-                delete write_buffer_;
+                delete _read_buffer;
+                delete _write_buffer;
             }
 
             LogBuffer(const LogBuffer& other) = delete;
@@ -139,7 +139,7 @@ namespace efp {
 
             template <typename A>
             inline Unit enqueue_arg(A a) {
-                write_buffer_->push_back(a);
+                _write_buffer->push_back(a);
                 return unit;
             }
 
@@ -154,7 +154,7 @@ namespace efp {
                 memcpy(head.chars, a.data(), chars_in_head);
                 head.length = static_cast<uint8_t>(chars_in_head);
 
-                write_buffer_->push_back(head);
+                _write_buffer->push_back(head);
 
                 if (str_length > stl_string_head_capacity) {
                     int remaining_length = str_length - chars_in_head;
@@ -168,7 +168,7 @@ namespace efp {
 
                         memcpy(data.chars, a.data() + offset, length_to_push);
 
-                        write_buffer_->push_back(data);
+                        _write_buffer->push_back(data);
 
                         offset += length_to_push;
                         remaining_length -= length_to_push;
@@ -182,51 +182,51 @@ namespace efp {
             inline void enqueue(LogLevel level, const char* fmt_str,
                                 const Args&... args) {
                 if (sizeof...(args) == 0) {
-                    spinlock_.lock();
-                    write_buffer_->push_back(detail::PlainMessage{
+                    _spinlock.lock();
+                    _write_buffer->push_back(detail::PlainMessage{
                         fmt_str,
                         level,
                     });
-                    spinlock_.unlock();
+                    _spinlock.unlock();
                 } else {
-                    spinlock_.lock();
-                    write_buffer_->push_back(detail::FormatedMessage{
+                    _spinlock.lock();
+                    _write_buffer->push_back(detail::FormatedMessage{
                         fmt_str,
                         sizeof...(args),
                         level,
                     });
 
                     execute_pack(enqueue_arg(args)...);
-                    spinlock_.unlock();
+                    _spinlock.unlock();
                 }
             }
 
             inline void swap_buffer() {
-                spinlock_.lock();
-                efp::swap(write_buffer_, read_buffer_);
-                spinlock_.unlock();
+                _spinlock.lock();
+                efp::swap(_write_buffer, _read_buffer);
+                _spinlock.unlock();
             }
 
             void collect_dyn_args(size_t arg_num) {
                 const auto collect_arg = [&](size_t) {
-                    read_buffer_->pop_front().match(
-                        [&](int arg) { dyn_args_.push_back(arg); },
-                        [&](short arg) { dyn_args_.push_back(arg); },
-                        [&](long arg) { dyn_args_.push_back(arg); },
-                        [&](long long arg) { dyn_args_.push_back(arg); },
-                        [&](unsigned int arg) { dyn_args_.push_back(arg); },
-                        [&](unsigned short arg) { dyn_args_.push_back(arg); },
-                        [&](unsigned long arg) { dyn_args_.push_back(arg); },
-                        [&](unsigned long long arg) { dyn_args_.push_back(arg); },
-                        [&](char arg) { dyn_args_.push_back(arg); },
-                        [&](signed char arg) { dyn_args_.push_back(arg); },
-                        [&](unsigned char arg) { dyn_args_.push_back(arg); },
-                        [&](bool arg) { dyn_args_.push_back(arg); },
-                        [&](float arg) { dyn_args_.push_back(arg); },
-                        [&](double arg) { dyn_args_.push_back(arg); },
-                        [&](long double arg) { dyn_args_.push_back(arg); },
-                        [&](const char* arg) { dyn_args_.push_back(arg); },
-                        [&](void* arg) { dyn_args_.push_back(arg); },
+                    _read_buffer->pop_front().match(
+                        [&](int arg) { _dyn_args.push_back(arg); },
+                        [&](short arg) { _dyn_args.push_back(arg); },
+                        [&](long arg) { _dyn_args.push_back(arg); },
+                        [&](long long arg) { _dyn_args.push_back(arg); },
+                        [&](unsigned int arg) { _dyn_args.push_back(arg); },
+                        [&](unsigned short arg) { _dyn_args.push_back(arg); },
+                        [&](unsigned long arg) { _dyn_args.push_back(arg); },
+                        [&](unsigned long long arg) { _dyn_args.push_back(arg); },
+                        [&](char arg) { _dyn_args.push_back(arg); },
+                        [&](signed char arg) { _dyn_args.push_back(arg); },
+                        [&](unsigned char arg) { _dyn_args.push_back(arg); },
+                        [&](bool arg) { _dyn_args.push_back(arg); },
+                        [&](float arg) { _dyn_args.push_back(arg); },
+                        [&](double arg) { _dyn_args.push_back(arg); },
+                        [&](long double arg) { _dyn_args.push_back(arg); },
+                        [&](const char* arg) { _dyn_args.push_back(arg); },
+                        [&](void* arg) { _dyn_args.push_back(arg); },
                         [&](const StlStringHead& arg) {
                             std::string str;
                             str.append(arg.chars, arg.length < stl_string_head_capacity
@@ -236,7 +236,7 @@ namespace efp {
                             // Extracting the remaining parts of the string if necessary
                             int remaining_length = arg.length - stl_string_head_capacity;
                             while (remaining_length > 0) {
-                                read_buffer_->pop_front().match(
+                                _read_buffer->pop_front().match(
                                     [&](const StlStringData& d) {
                                         const uint8_t append_length =
                                             remaining_length < stl_string_data_capacity
@@ -248,7 +248,7 @@ namespace efp {
                                     []() { fmt::println("String reconstruction error"); });
                             }
 
-                            dyn_args_.push_back(str);
+                            _dyn_args.push_back(str);
                         },
                         [&]() {
                             fmt::println(
@@ -258,30 +258,30 @@ namespace efp {
 
                 for_index(collect_arg, arg_num);
             }
-            void clear_dyn_args() { dyn_args_.clear(); }
+            void clear_dyn_args() { _dyn_args.clear(); }
 
             void dequeue() {
-                read_buffer_->pop_front().match(
+                _read_buffer->pop_front().match(
                     [&](const PlainMessage& str) {
-                        if (output_file_ == stdout) {
-                            fmt::print(output_file_, log_level_print_style(str.level), "{} ",
+                        if (_output_file == stdout) {
+                            fmt::print(_output_file, log_level_print_style(str.level), "{} ",
                                        log_level_cstr(str.level));
                         } else {
-                            fmt::print(output_file_, "{} ", log_level_cstr(str.level));
+                            fmt::print(_output_file, "{} ", log_level_cstr(str.level));
                         }
-                        fmt::print(output_file_, "{}", str.str);
-                        fmt::print(output_file_, "\n");
+                        fmt::print(_output_file, "{}", str.str);
+                        fmt::print(_output_file, "\n");
                     },
                     [&](const FormatedMessage& fstr) {
                         collect_dyn_args(fstr.arg_num);
-                        if (output_file_ == stdout) {
-                            fmt::print(output_file_, log_level_print_style(fstr.level), "{} ",
+                        if (_output_file == stdout) {
+                            fmt::print(_output_file, log_level_print_style(fstr.level), "{} ",
                                        log_level_cstr(fstr.level));
                         } else {
-                            fmt::print(output_file_, "{} ", log_level_cstr(fstr.level));
+                            fmt::print(_output_file, "{} ", log_level_cstr(fstr.level));
                         }
-                        fmt::vprint(output_file_, fstr.fmt_str, dyn_args_);
-                        fmt::print(output_file_, "\n");
+                        fmt::vprint(_output_file, fstr.fmt_str, _dyn_args);
+                        fmt::print(_output_file, "\n");
 
                         clear_dyn_args();
                     },
@@ -293,34 +293,34 @@ namespace efp {
             void dequeue_with_time(
                 const std::chrono::time_point<std::chrono::system_clock,
                                               std::chrono::seconds>& time_point) {
-                read_buffer_->pop_front().match(
+                _read_buffer->pop_front().match(
                     [&](const PlainMessage& msg) {
-                        if (output_file_ == stdout) {
-                            fmt::print(output_file_, fg(fmt::color::gray),
+                        if (_output_file == stdout) {
+                            fmt::print(_output_file, fg(fmt::color::gray),
                                        "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                            fmt::print(output_file_, log_level_print_style(msg.level), "{} ",
+                            fmt::print(_output_file, log_level_print_style(msg.level), "{} ",
                                        log_level_cstr(msg.level));
                         } else {
-                            fmt::print(output_file_, "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                            fmt::print(output_file_, "{} ", log_level_cstr(msg.level));
+                            fmt::print(_output_file, "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                            fmt::print(_output_file, "{} ", log_level_cstr(msg.level));
                         }
-                        fmt::print(output_file_, "{}", msg.str);
-                        fmt::print(output_file_, "\n");
+                        fmt::print(_output_file, "{}", msg.str);
+                        fmt::print(_output_file, "\n");
                     },
                     [&](const FormatedMessage& msg) {
                         collect_dyn_args(msg.arg_num);
 
-                        if (output_file_ == stdout) {
-                            fmt::print(output_file_, fg(fmt::color::gray),
+                        if (_output_file == stdout) {
+                            fmt::print(_output_file, fg(fmt::color::gray),
                                        "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                            fmt::print(output_file_, log_level_print_style(msg.level), "{} ",
+                            fmt::print(_output_file, log_level_print_style(msg.level), "{} ",
                                        log_level_cstr(msg.level));
                         } else {
-                            fmt::print(output_file_, "{:%Y-%m-%d %H:%M:%S} ", time_point);
-                            fmt::print(output_file_, "{} ", log_level_cstr(msg.level));
+                            fmt::print(_output_file, "{:%Y-%m-%d %H:%M:%S} ", time_point);
+                            fmt::print(_output_file, "{} ", log_level_cstr(msg.level));
                         }
-                        fmt::vprint(output_file_, msg.fmt_str, dyn_args_);
-                        fmt::print(output_file_, "\n");
+                        fmt::vprint(_output_file, msg.fmt_str, _dyn_args);
+                        fmt::print(_output_file, "\n");
 
                         clear_dyn_args();
                     },
@@ -329,60 +329,36 @@ namespace efp {
                     });
             }
 
-            inline bool empty() { return read_buffer_->empty(); }
+            inline bool empty() { return _read_buffer->empty(); }
 
-            inline void set_output_file(FILE* output_file) { output_file_ = output_file; }
+            inline void set_output_file(FILE* output_file) { _output_file = output_file; }
 
-            inline void set_log_level(LogLevel log_level) { log_level_ = log_level; }
+            inline void set_log_level(LogLevel log_level) { _log_level = log_level; }
 
-            inline LogLevel get_log_level() { return log_level_; }
-
-        private:
-            Spinlock spinlock_;
-            Vcq<LogData, EFP_LOG_BUFFER_SIZE>* write_buffer_;
-            Vcq<LogData, EFP_LOG_BUFFER_SIZE>* read_buffer_;
-            fmt::dynamic_format_arg_store<fmt::format_context> dyn_args_;
-            LogLevel log_level_ = LogLevel::Info;
-            std::FILE* output_file_ = stdout;
-        };
-
-        // ! Deprecated. Global log seems fast enough.
-        // Forward declaration of LocalLogger
-        class LocalLogger {
-        public:
-            LocalLogger();
-            ~LocalLogger();
-
-            template <typename A>
-            Unit enqueue_arg(A a);
-
-            template <typename... Args>
-            void enqueue(LogLevel level, const char* fmt_str, const Args&... args);
-
-            void swap_buffer();
-            void dequeue();
-            void dequeue_with_time(
-                const std::chrono::time_point<std::chrono::system_clock,
-                                              std::chrono::seconds>& time_point);
-
-            bool empty();
+            inline LogLevel get_log_level() { return _log_level; }
 
         private:
-            LogBuffer log_buffer_;
+            Spinlock _spinlock;
+            Vcq<LogData, EFP_LOG_BUFFER_SIZE>* _write_buffer;
+            Vcq<LogData, EFP_LOG_BUFFER_SIZE>* _read_buffer;
+            fmt::dynamic_format_arg_store<fmt::format_context> _dyn_args;
+            LogLevel _log_level = LogLevel::Info;
+            std::FILE* _output_file = stdout;
         };
+
     } // namespace detail
 
     // The main logger class
 
     class Logger {
-        friend class detail::LocalLogger;
+        // friend class detail::LocalLogger;
 
     public:
         ~Logger() {
-            run_.store(false);
+            _run.store(false);
 
-            if (thread_.joinable())
-                thread_.join();
+            if (_thread.joinable())
+                _thread.join();
 
 #if EFP_LOG_TIME_STAMP == true
             process_with_time();
@@ -400,22 +376,22 @@ namespace efp {
 
         static inline void set_log_level(LogLevel log_level) {
 
-            instance().log_buffer_.set_log_level(log_level);
+            instance()._log_buffer.set_log_level(log_level);
         }
 
         static inline LogLevel get_log_level() {
-            return instance().log_buffer_.get_log_level();
+            return instance()._log_buffer.get_log_level();
         }
 
         static void set_output(FILE* output_file) {
-            instance().log_buffer_.set_output_file(output_file);
+            instance()._log_buffer.set_output_file(output_file);
         }
 
         static void set_output(const char* path) {
 
             FILE* output_file = fopen(path, "a");
             if (output_file) {
-                instance().log_buffer_.set_output_file(output_file);
+                instance()._log_buffer.set_output_file(output_file);
             } else {
                 printf("Can not open the ouput file");
                 abort();
@@ -426,10 +402,10 @@ namespace efp {
 
         void process() {
 
-            log_buffer_.swap_buffer();
+            _log_buffer.swap_buffer();
 
-            while (!log_buffer_.empty()) {
-                log_buffer_.dequeue();
+            while (!_log_buffer.empty()) {
+                _log_buffer.dequeue();
             }
         }
 
@@ -439,10 +415,10 @@ namespace efp {
                 std::chrono::time_point_cast<std::chrono::seconds>(now);
 
             // printf("running\n");
-            log_buffer_.swap_buffer();
+            _log_buffer.swap_buffer();
 
-            while (!log_buffer_.empty()) {
-                log_buffer_.dequeue_with_time(now_sec);
+            while (!_log_buffer.empty()) {
+                _log_buffer.dequeue_with_time(now_sec);
             }
         }
 
@@ -450,24 +426,24 @@ namespace efp {
 
         template <typename... Args>
         void enqueue(LogLevel level, const char* fmt_str, const Args&... args) {
-            log_buffer_.enqueue(level, fmt_str, args...);
+            _log_buffer.enqueue(level, fmt_str, args...);
         }
 
-        void dequeue() { log_buffer_.dequeue(); }
+        void dequeue() { _log_buffer.dequeue(); }
 
         void dequeue_with_time(
             const std::chrono::time_point<std::chrono::system_clock,
                                           std::chrono::seconds>& time_point) {
-            log_buffer_.dequeue_with_time(time_point);
+            _log_buffer.dequeue_with_time(time_point);
         }
 
     protected:
     private:
         Logger()
             : // with_time_stamp(true),
-              run_(true),
-              thread_([&]() {
-                  while (run_.load()) {
+              _run(true),
+              _thread([&]() {
+                  while (_run.load()) {
 #if EFP_LOG_TIME_STAMP == true
                       process_with_time();
 #else
@@ -479,12 +455,12 @@ namespace efp {
               }) {
         }
 
-        LogLevel log_level_;
+        LogLevel _log_level;
 
-        detail::LogBuffer log_buffer_;
+        detail::LogBuffer _log_buffer;
 
-        std::atomic<bool> run_;
-        std::thread thread_;
+        std::atomic<bool> _run;
+        std::thread _thread;
     };
 
     // LogLevel Logger::instance().log_level = LogLevel::Debug;
