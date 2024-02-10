@@ -2,8 +2,7 @@
 
 #include "efp/logger.hpp"
 
-int main()
-{
+int main() {
     using namespace efp;
 
     // Optional log level setting. Default is LogLevel::Info
@@ -20,9 +19,10 @@ int main()
 
     // Use the logging functions
     trace("This is a trace message with no formating");
-    debug("This is a debug message with a pointer: {:p}", (void *)nullptr);
+    // ! Issue not working properly with efp-dev-enum-rule-of-five
+    debug("This is a debug message with a pointer: {:p}", (void*)nullptr);
     info("This is a info message with a float: {}", 3.14f);
-    warn("This is a warn message with a int: {}", 42);
+    warn("This is a warn message with a int: {:d}", 42);
     error("This is a error message with a string literal: {}", "error");
     // ! Sending std::string to the buffer is O(n) and may increase risk of buffer overflow
     // ! Every 20 ~ 30 char will take one buffer space.

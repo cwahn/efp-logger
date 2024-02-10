@@ -5,6 +5,7 @@ if(NOT efp_FOUND)
     # GIT_TAG main
     # ! temp
     GIT_TAG dev-enum-rule-of-five
+    # GIT_TAG dev/trait
     )
     
     FetchContent_MakeAvailable(efp)

@@ -107,7 +107,7 @@ namespace efp {
             Enum<PlainMessage, FormatedMessage, int, short, long, long long,
                  unsigned int, unsigned short, unsigned long, unsigned long long, char,
                  signed char, unsigned char, bool, float, double, long double,
-                 const char*, void*, StlStringHead, StlStringData>;
+                 void*, const char*, StlStringHead, StlStringData>;
 
         class Spinlock {
         public:
@@ -227,8 +227,8 @@ namespace efp {
                         [&](float arg) { _dyn_args.push_back(arg); },
                         [&](double arg) { _dyn_args.push_back(arg); },
                         [&](long double arg) { _dyn_args.push_back(arg); },
-                        [&](const char* arg) { _dyn_args.push_back(arg); },
                         [&](void* arg) { _dyn_args.push_back(arg); },
+                        [&](const char* arg) { _dyn_args.push_back(arg); },
                         [&](const StlStringHead& arg) {
                             std::string str;
                             str.append(arg.chars, arg.length < stl_string_head_capacity
@@ -321,8 +321,15 @@ namespace efp {
                             fmt::print(_output_file, "{:%Y-%m-%d %H:%M:%S} ", time_point);
                             fmt::print(_output_file, "{} ", log_level_cstr(msg.level));
                         }
+                        // ! Temp
                         fmt::vprint(_output_file, msg.fmt_str, _dyn_args);
-                        fmt::print(_output_file, "\n");
+                        // try {
+                        //     fmt::vprint(_output_file, msg.fmt_str, _dyn_args);
+                        // } catch (const fmt::format_error& e) {
+                        //     fmt::println(_output_file, "Caught a format_error: {}\n", e.what());
+                        //     fmt::println(_output_file, "Offending format string: {}\n", msg.fmt_str);
+                        // }
+                        // fmt::print(_output_file, "\n");
 
                         clear_dyn_args();
                     },
