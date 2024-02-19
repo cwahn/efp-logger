@@ -151,7 +151,7 @@ namespace efp {
                 uint8_t chars_in_head = str_length < stl_string_head_capacity
                                             ? str_length
                                             : stl_string_head_capacity;
-                memcpy(head.chars, a.data(), chars_in_head);
+                _memcpy(head.chars, a.data(), chars_in_head);
                 head.length = static_cast<uint8_t>(chars_in_head);
 
                 _write_buffer->push_back(head);
@@ -166,7 +166,7 @@ namespace efp {
                                                      ? remaining_length
                                                      : stl_string_data_capacity;
 
-                        memcpy(data.chars, a.data() + offset, length_to_push);
+                        _memcpy(data.chars, a.data() + offset, length_to_push);
 
                         _write_buffer->push_back(data);
 
