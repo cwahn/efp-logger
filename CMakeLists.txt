@@ -9,29 +9,29 @@ enable_testing()
 
 include(FetchContent)
 
-# efp
-find_package(efp QUIET)
+# # efp
+# find_package(efp QUIET)
 
-if(NOT efp_FOUND)
-    FetchContent_Declare(
-        efp
-        GIT_REPOSITORY http://github.com/cwahn/efp.git
-        GIT_TAG dev/trait
-    )
-    FetchContent_MakeAvailable(efp)
-endif()
+# if(NOT efp_FOUND)
+#     FetchContent_Declare(
+#         efp
+#         GIT_REPOSITORY http://github.com/cwahn/efp.git
+#         GIT_TAG dev/trait
+#     )
+#     FetchContent_MakeAvailable(efp)
+# endif()
 
-# fmt
-find_package(fmt QUIET)
+# # fmt
+# find_package(fmt QUIET)
 
-if(NOT fmt_FOUND)
-    FetchContent_Declare(
-        fmt
-        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG master
-    )
-    FetchContent_MakeAvailable(fmt)
-endif()
+# if(NOT fmt_FOUND)
+#     FetchContent_Declare(
+#         fmt
+#         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+#         GIT_TAG master
+#     )
+#     FetchContent_MakeAvailable(fmt)
+# endif()
 
 add_library(efp_logger INTERFACE)
 target_include_directories(efp_logger INTERFACE include)
@@ -41,4 +41,9 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-add_subdirectory(example)
+add_subdirectory(extern)
+
+# Only if the project is the top-most project
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    add_subdirectory(example)
+endif()

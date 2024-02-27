@@ -358,7 +358,7 @@ namespace efp {
             _run.store(false);
 
             if (_thread.joinable())
-                _thread.join();
+                 _thread.join();
 
 #if EFP_LOG_TIME_STAMP == true
             process_with_time();
