@@ -2,7 +2,7 @@ if(NOT efp_FOUND)
 
     FetchContent_Declare(efp
     GIT_REPOSITORY "http://github.com/cwahn/efp"
-    GIT_TAG main
+    GIT_TAG v0.1.0-beta.2
     )
     
     FetchContent_MakeAvailable(efp)
