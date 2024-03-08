@@ -139,7 +139,7 @@ namespace efp {
 
             template <typename A>
             inline Unit enqueue_arg(A a) {
-                _write_buffer->push_back(a);
+                _write_buffer->push_back(detail::LogData{efp::forward<A>(a)});
                 return unit;
             }
 
@@ -358,7 +358,7 @@ namespace efp {
             _run.store(false);
 
             if (_thread.joinable())
-                 _thread.join();
+                _thread.join();
 
 #if EFP_LOG_TIME_STAMP == true
             process_with_time();

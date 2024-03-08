@@ -21,7 +21,7 @@ int main() {
 
     // Use the logging functions
     trace("This is a trace message with no formating");
-    debug("This is a debug message with a pointer: {}", (void*)&x);
+    debug("This is a debug message with a pointer: {:p}", (void*)&x);
     info("This is a info message with a float: {}", 3.14f);
     warn("This is a warn message with a int: {}", 42);
     error("This is a error message with a string literal: {}", "error");
