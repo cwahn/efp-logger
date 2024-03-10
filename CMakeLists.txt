@@ -8,12 +8,12 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
-include(cmake/CPM.cmake)
+include("cmake/CPM.cmake")
 
 CPMAddPackage(
     NAME efp
-    VERSION 0.1.0-rc.3
-    URL "https://github.com/cwahn/efp/archive/refs/tags/v0.1.0-rc.3.tar.gz"
+    VERSION 0.1.0-rc.4
+    URL "https://github.com/cwahn/efp/archive/refs/tags/v0.1.0-rc.4.tar.gz"
 )
 
 CPMAddPackage(

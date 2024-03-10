@@ -29,5 +29,11 @@ int main() {
     // ! Every 20 ~ 30 char will take one buffer space.
     fatal("This is a fatal message with a std::string: {}", std::string("fatal error"));
 
+    const auto lorem_ipsum = std::string("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.");
+    info("This is a info message with a long string: {}", lorem_ipsum);
+    const auto a_1000 = std::string(1000, 'a');
+    info("This is a info message with a 1000 char string: {}", a_1000);
+    info("Does it support Korean? {}", "한글도 되나요?");
+
     return 0;
 }
