@@ -87,11 +87,11 @@ namespace efp {
         };
 
         constexpr uint8_t stl_string_data_capacity = sizeof(FormatedMessage);
-        constexpr uint8_t stl_string_head_capacity = stl_string_data_capacity - 1;
+        constexpr uint8_t stl_string_head_capacity = stl_string_data_capacity - sizeof(size_t);
 
         // Data structure for std::string preventing each char takes size of full Enum;
         struct StlStringHead {
-            uint8_t length;
+            size_t length;
             char chars[stl_string_head_capacity];
         };
 
@@ -145,26 +145,28 @@ namespace efp {
 
             // todo Need pointer casting specialization
             inline Unit enqueue_arg(const std::string& a) {
-                const uint8_t str_length = a.length();
+                const auto str_length = a.length();
 
                 StlStringHead head{};
-                uint8_t chars_in_head = str_length < stl_string_head_capacity
-                                            ? str_length
-                                            : stl_string_head_capacity;
+                const auto chars_in_head = str_length < stl_string_head_capacity
+                                               ? str_length
+                                               : stl_string_head_capacity;
+
                 _memcpy(head.chars, a.data(), chars_in_head);
-                head.length = static_cast<uint8_t>(chars_in_head);
+
+                head.length = str_length;
 
                 _write_buffer->push_back(head);
 
                 if (str_length > stl_string_head_capacity) {
                     int remaining_length = str_length - chars_in_head;
-                    uint8_t offset = chars_in_head;
+                    size_t offset = chars_in_head;
 
                     while (remaining_length > 0) {
                         StlStringData data{};
-                        uint8_t length_to_push = remaining_length < stl_string_data_capacity
-                                                     ? remaining_length
-                                                     : stl_string_data_capacity;
+                        size_t length_to_push = remaining_length < stl_string_data_capacity
+                                                    ? remaining_length
+                                                    : stl_string_data_capacity;
 
                         _memcpy(data.chars, a.data() + offset, length_to_push);
 
@@ -234,7 +236,7 @@ namespace efp {
                                                       : stl_string_head_capacity);
 
                             // Extracting the remaining parts of the string if necessary
-                            int remaining_length = arg.length - stl_string_head_capacity;
+                            size_t remaining_length = arg.length - stl_string_head_capacity;
                             while (remaining_length > 0) {
                                 _read_buffer->pop_front().match(
                                     [&](const StlStringData& d) {
