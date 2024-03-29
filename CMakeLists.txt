@@ -12,7 +12,7 @@ include("cmake/CPM.cmake")
 
 CPMAddPackage(
     NAME efp
-    VERSION 0.1.0-rc.4
+    VERSION 0.1.0-rc.5
     URL "https://github.com/cwahn/efp/archive/refs/tags/v0.1.0-rc.4.tar.gz"
 )
 
