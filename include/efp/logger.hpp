@@ -236,7 +236,10 @@ namespace efp {
                                                       : stl_string_head_capacity);
 
                             // Extracting the remaining parts of the string if necessary
-                            size_t remaining_length = arg.length - stl_string_head_capacity;
+                            size_t remaining_length = arg.length > stl_string_head_capacity
+                                                          ? arg.length - stl_string_head_capacity
+                                                          : 0;
+
                             while (remaining_length > 0) {
                                 _read_buffer->pop_front().match(
                                     [&](const StlStringData& d) {
