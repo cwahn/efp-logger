@@ -34,6 +34,7 @@ int main() {
     // const auto a_1000 = std::string(1000, 'a');
     // info("This is a info message with a 1000 char string: {}", a_1000);
     // info("Does it support Korean? {}", "한글도 되나요?");
+    // info("This is a info message with a empty string: {}", std::string(""));
 
     return 0;
 }

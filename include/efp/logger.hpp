@@ -236,7 +236,10 @@ namespace efp {
                                                       : stl_string_head_capacity);
 
                             // Extracting the remaining parts of the string if necessary
-                            size_t remaining_length = arg.length - stl_string_head_capacity;
+                            size_t remaining_length = arg.length > stl_string_head_capacity
+                                                          ? arg.length - stl_string_head_capacity
+                                                          : 0;
+
                             while (remaining_length > 0) {
                                 _read_buffer->pop_front().match(
                                     [&](const StlStringData& d) {
@@ -341,8 +344,8 @@ namespace efp {
 
         private:
             Spinlock _spinlock;
-            Vcq<LogData, EFP_LOG_BUFFER_SIZE>* _write_buffer;
             Vcq<LogData, EFP_LOG_BUFFER_SIZE>* _read_buffer;
+            Vcq<LogData, EFP_LOG_BUFFER_SIZE>* _write_buffer;
             fmt::dynamic_format_arg_store<fmt::format_context> _dyn_args;
             LogLevel _log_level = LogLevel::Info;
             std::FILE* _output_file = stdout;
